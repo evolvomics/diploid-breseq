@@ -145,7 +145,7 @@ void identify_homopolymer_repeats(
     
     // For each nucleotide in the sequence
     for( size_t j=1; j<=ref_seqs[i].get_sequence_length(); j++ ){
-      if( ref_seqs[i].get_sequence_1(j) == base ){
+      if( ref_seqs[i].get_char_1(j) == base ){
         rnumber++;
       }
       else{
@@ -158,7 +158,7 @@ void identify_homopolymer_repeats(
           hr.push_back(r);
           //printf( "%i:%c\n", r.start, r.base );
         }
-        base = ref_seqs[i].get_sequence_1(j);
+        base = ref_seqs[i].get_char_1(j);
         rnumber = 1;
       }
     }

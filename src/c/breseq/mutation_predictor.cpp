@@ -2498,7 +2498,7 @@ namespace breseq {
     for(vector<cAnnotatedSequence>::iterator it=ref_seq_info.begin(); it!=ref_seq_info.end(); ++it) {
       cAnnotatedSequence& seq = *it;
       for(size_t i=1; i<=seq.get_sequence_length(); ++i) {
-        char base = seq.get_sequence_1(i);
+        char base = seq.get_char_1(i);
         if ((base != 'A') && (base != 'T') && (base != 'C') && (base != 'G'))
           cerr << "WARNING: Nonstandard base in sequence:" << base << "\n"; 
         else
@@ -2514,7 +2514,7 @@ namespace breseq {
       // But set the bases that are no change to no_change
       for (uint32_t this_location_0 = 0; this_location_0 < seq.get_sequence_length(); ++this_location_0)
         for (size_t b=0; b<BaseSubstitutionEffects::base_char_list.size(); b++)
-          if (BaseSubstitutionEffects::base_char_list[b] == seq.get_sequence_1(this_location_0+1) )
+          if (BaseSubstitutionEffects::base_char_list[b] == seq.get_char_1(this_location_0+1) )
             seq_bse[this_location_0*4+b] = max(seq_bse[this_location_0*4+b], no_change_base_substitution);
       
       SequenceBaseCDSStrands& seq_bcs = m_bcs[seq.m_seq_id];
@@ -2703,7 +2703,7 @@ namespace breseq {
       if (verbose) {
         for(size_t i=1; i<=seq.get_sequence_length(); ++i) {
           const size_t i_0 = i-1;
-          char base = seq.get_sequence_1(i);
+          char base = seq.get_char_1(i);
           cout << i << "\t" << base << "\t" << seq_bcs[i_0] << "\t"
           << seq_bse[i_0*4+0] << "\t" << seq_bse[i_0*4+1] << "\t" << seq_bse[i_0*4+2] << "\t" << seq_bse[i_0*4+3] << endl;
         }
@@ -2790,7 +2790,7 @@ namespace breseq {
     uint32_t pos_0 = pos_1 - 1;
     BaseSubstitutionEffectPositionInfo pos_info;
    
-    pos_info.m_base_char = ref_seq_info[seq_id].get_sequence_1(pos_1);
+    pos_info.m_base_char = ref_seq_info[seq_id].get_char_1(pos_1);
     
     SequenceBaseSubstitutionEffects::iterator bse_it = m_bse[seq_id].begin() + pos_0 * 4;
     

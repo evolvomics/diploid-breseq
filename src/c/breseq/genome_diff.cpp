@@ -3622,7 +3622,7 @@ void cGenomeDiff::random_mutations(string exclusion_file,
         new_item["position"] = to_string(pos_1);
 
         if (mut_type == "SNP") {
-          new_item["new_seq"] = cSimFastqSequence::get_random_error_base(ref.get_sequence_1(pos_1));        
+          new_item["new_seq"] = cSimFastqSequence::get_random_error_base(ref.get_char_1(pos_1));        
         } 
         else 
         if (mut_type == "INS") {

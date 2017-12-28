@@ -598,7 +598,8 @@ namespace breseq {
       string m_description; // GenBank (DEFINITION) | GFF (description), from main feature line
       string m_seq_id;      // GenBank (LOCUS)      | GFF (seqid), from ##sequence-region line
       string m_file_name;   // Name of file this sequence was loaded from
-
+      size_t m_ploidy;      // Ploidy
+    
       cFastaSequence m_fasta_sequence;            //!< Nucleotide sequence
     
       // Features are stored as counted pointers so that we can have ready-made lists
@@ -624,7 +625,8 @@ namespace breseq {
         m_length(0),
         m_is_circular(false),
         m_description("na"), 
-        m_seq_id("na")
+        m_seq_id("na"),
+        m_ploidy(0)
         {} ;
     
       void set_features_loaded_from_file(const string& file_name, bool allow_reload = false) {
@@ -649,15 +651,25 @@ namespace breseq {
         return m_is_circular;
       }
     
-      // Utility to get top strand sequence
-      string get_sequence_1(int32_t start_1, int32_t end_1) const
+      // Set up the proper number of sequences for our ploidy
+      void set_ploidy(const size_t _ploidy)
       {
-        return m_fasta_sequence.get_sequence_1(start_1, end_1);
+        ASSERT(m_ploidy==0, "Attempt to set ploidy that was already set for sequence " + m_seq_id);
+        m_fasta_sequence.set_ploidy(_ploidy);
+        m_ploidy = m_fasta_sequence.get_ploidy();
       }
     
-      char get_sequence_1(int32_t pos_1) const
+      size_t get_ploidy() { return m_fasta_sequence.get_ploidy(); }
+    
+      // Utility to get top strand sequence
+      string get_sequence_1(int32_t start_1, int32_t end_1, const size_t chr_0=0) const
       {
-        return m_fasta_sequence.get_sequence_1(pos_1);
+        return m_fasta_sequence.get_sequence_1(start_1, end_1, chr_0);
+      }
+    
+      char get_char_1(int32_t pos_1, const size_t chr_0=0) const
+      {
+        return m_fasta_sequence.get_char_1(pos_1, chr_0);
       }
     
       string get_stranded_sequence_1(int32_t strand, int32_t start_1, int32_t end_1) const;
@@ -666,9 +678,9 @@ namespace breseq {
       int32_t get_circular_distance_1(int32_t pos_1, int32_t pos_2) const;
 
     
-      size_t get_sequence_length(void) const
+      size_t get_sequence_length(const size_t chr_0=0) const
       {
-        return m_fasta_sequence.get_sequence_length();
+        return m_fasta_sequence.get_sequence_length(chr_0);
       }
 
       // Replace Sequence with Input
@@ -771,7 +783,7 @@ namespace breseq {
     map<string,string> m_seq_id_to_original_file_name;
 
     //!< Currently supported file types.
-    enum FileType {UNKNOWN, GENBANK, FASTA, GFF3, BULL};
+    enum FileType {UNKNOWN, GENBANK, FASTA, GFF3, VCF, BULL};
 
   public:
     
@@ -826,11 +838,16 @@ namespace breseq {
     
     //!< Verify that all seq_id have sequence and that features fit in sequence;
     void VerifySequenceFeatureMatch();
+    
+    //!< Fix non ATCGN characters in sequences
+    void standardize_sequences();
+
     bool Initialized() {return m_initialized;}
     
     void ReadFASTA(const std::string &file_name);
     void ReadFASTA(cFastaFile& ff);
     void ReadGFF(const string& file_name);
+    void ReadVCF(const string& file_name);
     void ReadBull(const string& file_name);
 
     //!< Read GenBank file

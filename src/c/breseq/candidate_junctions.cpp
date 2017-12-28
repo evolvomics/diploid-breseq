@@ -1392,9 +1392,9 @@ namespace breseq {
         string test_r1_char;
         string test_r2_char;
 
-        test_r1_char = ref_seq_1->get_sequence_1(test_r1_pos);
+        test_r1_char = ref_seq_1->get_char_1(test_r1_pos);
         if (hash_strand_1) test_r1_char = reverse_complement(test_r1_char);
-        test_r2_char = ref_seq_2->get_sequence_1(test_r2_pos);
+        test_r2_char = ref_seq_2->get_char_1(test_r2_pos);
         if (!hash_strand_2) test_r2_char = reverse_complement(test_r2_char);
         
         while (test_r1_char == test_r2_char)
@@ -1413,9 +1413,9 @@ namespace breseq {
           }
 
           
-          test_r1_char = ref_seq_1->get_sequence_1(test_r1_pos);
+          test_r1_char = ref_seq_1->get_char_1(test_r1_pos);
           if (hash_strand_1) test_r1_char = reverse_complement(test_r1_char);
-          test_r2_char = ref_seq_2->get_sequence_1(test_r2_pos);
+          test_r2_char = ref_seq_2->get_char_1(test_r2_pos);
           if (!hash_strand_2) test_r2_char = reverse_complement(test_r2_char);
         }
         

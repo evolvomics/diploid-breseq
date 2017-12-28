@@ -125,8 +125,8 @@ namespace breseq {
     ASSERT( (strand==-1) || (strand ==+1), "Expected strand +/-1. Provided: " + to_string(strand));
     
     return ((strand==1)
-            ? get_sequence_1(pos_1)
-            : reverse_complement(get_sequence_1(pos_1))
+            ? get_char_1(pos_1)
+            : reverse_complement(get_char_1(pos_1))
             );
   }
   
@@ -732,37 +732,13 @@ namespace breseq {
     this->VerifySequenceFeatureMatch();
     this->m_initialized = true;
     
-    // To uppercase and change nonstandard chars to 'N' in all sequences.
+    // Set default ploidy to haploid if it was not previously set
     for (size_t i=0; i<this->size(); i++) {
-      
-      // Uppercase
-      string this_sequence = to_upper((*this)[i].m_fasta_sequence.get_sequence());
-      
-      // Remedy nonstandard characters to 'N'
-      map<char,uint32_t> bad_char;
-      for (size_t j=0; j<this_sequence.size(); j++) {
-        if ( !strchr( "ATCGN",  this_sequence[j] )) {
-          if (bad_char.count(this_sequence[j])) {
-            bad_char[this_sequence[j]]++;
-          } else {
-            bad_char[this_sequence[j]] = 1;
-          }
-          this_sequence[j] = 'N';
-        }
-      }
-      
-      (*this)[i].m_fasta_sequence.set_sequence(this_sequence);
-      
-      // Found some bad characters...
-      if (bad_char.size()) {
-        string warning_string("Non-standard base characters found in sequence: " + (*this)[i].m_seq_id + "\n");
-        for(map<char,uint32_t>::iterator it = bad_char.begin(); it != bad_char.end(); it++) {
-          warning_string += "  character: '" + to_string<char>(it->first) + "'  (occurrences: " + to_string(it->second) + ")\n";
-        }
-        warning_string +="Characters that are not in the set 'ATCGN' will be changed to 'N'.";
-        WARN(warning_string);
+      if ((*this)[i].m_ploidy == 0) {
+        (*this)[i].m_fasta_sequence.set_ploidy(1);
       }
     }
+    this->standardize_sequences();
     
     // Make certain feature items safe for making into lists separated by semicolons
     this->make_features_safe();
@@ -770,7 +746,6 @@ namespace breseq {
     // Finally, update feature lists
     this->update_feature_lists();
   }
-  
   
   void cReferenceSequences::PrivateLoadFile(const string& file_name)
   {
@@ -803,6 +778,10 @@ namespace breseq {
     // GFF?
     else if (first_line.find("##gff-version 3") != string::npos) {
       file_type = GFF3;
+    }
+    // VCF? - no provision for different versions
+    else if (first_line.find("##fileformat=VCF") != string::npos) {
+      file_type = VCF;
     }
     // BULL? Lines have three "words"
     else if (split_first_line.size() == 3) {
@@ -847,6 +826,11 @@ namespace breseq {
         ReadGFF(file_name);
       }break;
         
+      case VCF:
+      {
+        ReadVCF(file_name);
+      }break;
+        
       default:
         WARN("Could not load the reference file: " +file_name);
     }
@@ -876,6 +860,45 @@ namespace breseq {
     if (Error) ERROR(ss.str());
     if (this->empty()) ERROR("Reference files were not loaded");
   }
+  
+  void cReferenceSequences::standardize_sequences()
+  {
+    for(size_t i=0; i<this->size(); i++) {
+      size_t ploidy = (*this)[i].m_fasta_sequence.get_ploidy();
+      
+      for(size_t chr_0=0; chr_0<ploidy; chr_0++) {
+
+        // Uppercase
+        string this_sequence = to_upper((*this)[i].m_fasta_sequence.get_sequence(chr_0));
+        
+        // Remedy nonstandard characters to 'N'
+        map<char,uint32_t> bad_char;
+        for (size_t j=0; j<this_sequence.size(); j++) {
+          if ( !strchr( "ATCGN.",  this_sequence[j] )) {
+            if (bad_char.count(this_sequence[j])) {
+              bad_char[this_sequence[j]]++;
+            } else {
+              bad_char[this_sequence[j]] = 1;
+            }
+            this_sequence[j] = 'N';
+          }
+        }
+        
+        (*this)[i].m_fasta_sequence.set_sequence(this_sequence, chr_0);
+        
+        // Found some bad characters...
+        if (bad_char.size()) {
+          string warning_string("Non-standard base characters found in sequence: " + (*this)[i].m_seq_id + ( ploidy >1  ? "(chromosome " + to_string(chr_0+1) + ")" : "" ) + "\n");
+          for(map<char,uint32_t>::iterator it = bad_char.begin(); it != bad_char.end(); it++) {
+            warning_string += "  character: '" + to_string<char>(it->first) + "'  (occurrences: " + to_string(it->second) + ")\n";
+          }
+          warning_string +="Characters that are not in the set 'ATCGN' will be changed to 'N'.";
+          WARN(warning_string);
+        }
+      }
+    }
+  }
+
 
   void cReferenceSequences::ReadFASTA(const string &file_name) {
     
@@ -1208,6 +1231,7 @@ namespace breseq {
     }
   }
   
+
   
 /*! WriteGFF abides by the following format:
   http://www.sequenceontology.org/gff3.shtml 
@@ -1308,8 +1332,87 @@ void cReferenceSequences::WriteGFF( const string &file_name, bool no_sequence) {
   out.close();
 }
 
+// Genotype items must be split with / because they are unphased (| means phased)
+void cReferenceSequences::ReadVCF(const string& file_name)
+{
+  ifstream in(file_name.c_str());
+  ASSERT(!in.fail(), "Could not open VCF file: " + file_name);
   
+  string line;
+  bool found_header(false);
+  vector<string> header_items = split(line, "\t");
+  size_t line_number = 0;
+  while (getline(in, line)) {
+    line_number++;
+    if (line.find("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT") != string::npos) {
+      found_header = true;
+      header_items = split(line, "\t");
+      break;
+    }
+  }
   
+  ASSERT(found_header, "Did not find required header line of format\n#CHROM<tab>POS<tab>ID<tab>REF<tab>ALT<tab>QUAL<tab>FILTER<tab>INFO<tab>FORMAT<tab><SAMPLE>");
+  CHECK(header_items.size()==10, "Found more than one SAMPLE_ID column. Only the first column (" + header_items[9] + ") will be used.");
+  
+  while (getline(in, line)) {
+    line_number++;
+    vector<string> line_items = split(line, "\t");
+
+    ASSERT(line_items.size() != header_items.size(), "Error loading VCF file: " + to_string(file_name) + "\nNumber of columns on line " + to_string(line_number) + ":\n" + join(line_items, "\t") + "\ndoes not match number of columns in header line:\n" + join(header_items, "\t"));
+    
+    string& seq_id = line_items[0];
+    
+    ASSERT(!m_seq_id_to_index.count(seq_id), "Error loading VCF file: " + to_string(file_name) + "\nNo reference sequence with id [" + seq_id + "] has been loaded. Be sure to load the main sequence file before the corresponding VCF file.");
+      
+    size_t seq_index =  m_seq_id_to_index[line_items[0]];
+    
+    cAnnotatedSequence& seq = (*this)[seq_index];
+    uint64_t position_1 = from_string<uint64_t>(line_items[1]);
+    
+    // Find the GT in the format column
+    vector<string> format_items = split(line_items[8], ":");
+    vector<string> sample_items = split(line_items[9], ":");
+
+    ASSERT(format_items.size() != sample_items.size(), "Error loading VCF file: " + to_string(file_name) + "\nNumber items in FORMAT column (#9) does not equal number in SAMPLE column (#10) on line " + to_string(line_number) + ":\nFORMAT " + line_items[8] + "\nSAMPLE:" + line_items[9]);
+    
+    vector<string> alleles;
+    alleles.push_back(line_items[3]);
+    
+    vector<string> alt_alleles = split(line_items[4], ",");
+    alleles.insert(alleles.end(), alt_alleles.begin(), alt_alleles.end());
+    
+    // Need to do some complicated stuff to deal with indels!
+    for(size_t c=0; c<alleles.size(); c++) {
+      if (alleles[c].size() != 1) {
+        ERROR("Error loading VCF file: " + to_string(file_name) + "\nRef or alt allele does not have a length of 1 on line " + to_string(line_number) + ":\n" + join(line_items, "\t") )
+      }
+    }
+    //// <--- remove when implemented
+    
+    bool found_genotype(false);
+    for (size_t i=0; i<format_items.size(); i++) {
+      if (format_items[i]=="GT") {
+        found_genotype = true;
+        vector<string> genotype_items = split(line_items[i], "/");
+        
+        if (seq.get_ploidy() == 0) {
+          seq.set_ploidy(genotype_items.size());
+        }
+        
+        for (size_t chr_0=0; chr_0!=alleles.size(); chr_0++) {
+          seq.m_fasta_sequence.replace_sequence_1(position_1, position_1, alleles[chr_0], chr_0);
+        }
+      }
+    }
+    
+    "Error loading VCF file: " + to_string(file_name) + "\nGenotype (GT) field not found on line " + to_string(line_number) + ":\n" + join(line_items, "\t");
+    
+    ASSERT(!found_genotype, "");
+    
+  }
+  
+}
+
 // This only outputs the features. No sequence!
 void cReferenceSequences::WriteCSV(const string &file_name) {
   ofstream out(file_name.c_str());

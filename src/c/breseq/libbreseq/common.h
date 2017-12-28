@@ -198,7 +198,8 @@ namespace breseq {
 #define ERROR(message) { my_error_handler( false, true, true, __FILE__, __BASE_FILE__, __LINE__, message); }
   
 // Nonfatal versions, add backtrace if requested
-#define CHECK(condition, message) { my_error_handler( condition, false, false, __FILE__, __BASE_FILE__, __LINE__, message); }
+#define CHECK(condition, message) { my_error_handler( condition, false, false, NULL, NULL, 0, message); }
+#define CHECK_WITH_BACKTRACE(condition, message) { my_error_handler( condition, false, false, __FILE__, __BASE_FILE__, __LINE__, message); }
 #define WARN(message) { my_error_handler( false,  false, false, NULL, NULL, 0, message); }
 #define WARN_WITH_BACKTRACE(message) { my_error_handler( false, false, true, __FILE__, __BASE_FILE__, __LINE__, message); }
   
