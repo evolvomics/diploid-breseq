@@ -47,9 +47,8 @@ int gdtools_usage()
   uout("Set and Filtering Operations:");
   uout << "SUBTRACT               remove mutations in one file from another" << endl;
   uout << "INTERSECT              keep shared mutations in two files" << endl;
-  uout << "UNION                  combine mutations, removing duplicates" << endl;
-  uout << "MERGE                  combine mutations, preserving duplicates" << endl;
-	uout << "REMOVE                 remove mutations matching specified conditions" << endl;
+  uout << "UNION/MERGE            combine mutations, removing duplicates" << endl;
+	uout << "FILTER/REMOVE          remove mutations matching specified conditions" << endl;
 	uout << "MASK                   remove mutation predictions in masked regions" << endl;
   uout << "NOT-EVIDENCE           remove evidence not used by any mutations" << endl;
 	
@@ -330,7 +329,7 @@ int do_weights(int argc, char* argv[])
   {
     uout << options.getArgv(i) << endl;
     cGenomeDiff gd2(options.getArgv(i));
-    gd1.fast_merge(gd2);
+    gd1.merge_preserving_duplicates(gd2);
   }
 
 
@@ -416,7 +415,7 @@ int do_check_plot(int argc, char *argv[])
 			cGenomeDiff gd(gd_file_name);
 			
 			// Merge in a way that preserves duplicates
-			merged_gd.fast_merge(gd);
+			merged_gd.merge_preserving_duplicates(gd);
 	}
 	
 	
@@ -982,7 +981,7 @@ int do_not_evidence(int argc, char *argv[])
   if(options.count("id"))
   {
     cGenomeDiff gd2;
-    gd2.merge(gd1, true, true);
+    gd2.merge(gd1, true);
     gd2.write(options["output"]);
   }
   else  {
@@ -1020,7 +1019,8 @@ void load_merge_multiple_gd_files(cGenomeDiff& gd, vector<cGenomeDiff>& gd_list,
 		
 		// Decide whether to merge in a new column
 		if ( (!options.count("collapse")) || (single_gd.mutation_list().size() > 0)) {
-			gd.merge(single_gd, true, false, options.count("phylogeny-aware"));
+			gd.merge(single_gd, false, options.count("phylogeny-aware"));
+			cout << gd.get_list().size();
 			gd_list.push_back(single_gd); // it's important to add a copy that has UN items intact
 		}
 		
@@ -1064,6 +1064,11 @@ int do_annotate(int argc, char* argv[])
 	options.addUsage("  PHYLIP  Alignment file suitable for input into PHYLIP");
 	options.addUsage("  JSON  	JavaScript object notation file suitable for parsing");
 	options.addUsage("");
+	options.addUsage(" When multiple GD files are provided, the #=TITLE metadata line in each file is used to name each sample/column. If that information is not present, then the GD file name is used (removing the *.gd suffix).");
+	options.addUsage("");
+	options.addUsage("");
+	options.addUsage("");
+	
 	options.addUsage("In output, frequencies of 'D' mean that this mutation occurs within");
 	options.addUsageSameLine("a region that is deleted by a different mutation in the genome in question. Frequencies");
 	options.addUsageSameLine("of '?' indicate that there were not enough aligned reads to call a mutation at this position");
@@ -1354,7 +1359,7 @@ int do_phylogeny(int argc, char* argv[])
 	vector<string> title_list;
 	for (vector<cGenomeDiff>::iterator it=gd_list.begin(); it!= gd_list.end(); it++) {
 		cGenomeDiff& single_gd = *it;
-		gd.merge(single_gd, true, false, options.count("phylogeny-aware"));
+		gd.merge(single_gd, false, options.count("phylogeny-aware"));
 		title_list.push_back(single_gd.get_title());
 		single_gd.set_title("_" + to_string<uint32_t>(file_num++) + "_");
 	}
@@ -1665,7 +1670,7 @@ int do_normalize_gd(int argc, char* argv[])
 
 int do_remove_gd(int argc, char* argv[])
 {
-  AnyOption options("gdtools REMOVE [-o output.gd] -c condition1 [-c condition2] [-m SNP] input.gd");
+  AnyOption options("gdtools FILTER/REMOVE [-o output.gd] -c condition1 [-c condition2] [-m SNP] input.gd");
 	options("help,h", "Display detailed help message", TAKES_NO_ARGUMENT);
   options("output,o", "Output Genome Diff file.", "output.gd");
   options("mut_type,m", "Only this mutation type will be removed.");
@@ -3551,18 +3556,17 @@ int main(int argc, char* argv[]) {
   } else if (command == "NORMALIZE") {
     return do_normalize_gd(argc_new, argv_new);
   } else if (command == "FILTER") {
-		ERROR("The FILTER subcommand has been replaced with REMOVE.");
-		return 0;
+		return do_remove_gd(argc_new, argv_new);
 	} else if (command == "REMOVE") {
 		return do_remove_gd(argc_new, argv_new);
 	} else if (command == "INTERSECT") {
     return do_intersection(argc_new, argv_new);
   } else if (command == "UNION") {
     return do_union(argc_new, argv_new);
-  } else if (command == "SUBTRACT") {
-    return do_subtract(argc_new, argv_new);    
-  } else if (command == "MERGE") {
+	} else if (command == "MERGE") {
 		return do_union(argc_new, argv_new);
+  } else if (command == "SUBTRACT") {
+    return do_subtract(argc_new, argv_new);
   } else if (command == "WEIGHTS") {
     return do_weights(argc_new, argv_new);
 	} else if (command == "CONVERT") {

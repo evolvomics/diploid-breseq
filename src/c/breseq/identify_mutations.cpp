@@ -110,8 +110,7 @@ bool rejected_RA_polymorphism_coverage(cDiffEntry& ra,
   bool rejected = false;
 
   // Minimum coverage on both strands for both reference and new allele
-  if (settings.polymorphism_minimum_new_coverage_each_strand > 0) {
-    double polymorphism_coverage_limit_both_bases = settings.polymorphism_minimum_new_coverage_each_strand;
+  if (settings.polymorphism_minimum_variant_coverage_each_strand > 0) {
     bool passed = true;
     vector<string> top_bot;
     double top;
@@ -120,18 +119,112 @@ bool rejected_RA_polymorphism_coverage(cDiffEntry& ra,
     top_bot = split(ra[MAJOR_COV], "/");
     top = from_string<double>(top_bot[0]);
     bot = from_string<double>(top_bot[1]);
-    passed = passed && (top >= polymorphism_coverage_limit_both_bases);
-    passed = passed && (bot >= polymorphism_coverage_limit_both_bases);
+    passed = passed && (top >= settings.polymorphism_minimum_variant_coverage_each_strand);
+    passed = passed && (bot >= settings.polymorphism_minimum_variant_coverage_each_strand);
     
     top_bot = split(ra[MINOR_COV], "/");
     top = from_string<double>(top_bot[0]);
     bot = from_string<double>(top_bot[1]);
-    passed = passed && (top >= polymorphism_coverage_limit_both_bases);
-    passed = passed && (bot >= polymorphism_coverage_limit_both_bases);
+    passed = passed && (top >= settings.polymorphism_minimum_variant_coverage_each_strand);
+    passed = passed && (bot >= settings.polymorphism_minimum_variant_coverage_each_strand);
     
     if (!passed) {
       rejected = true;
-      ra.add_reject_reason("STRAND_COVERAGE");
+      ra.add_reject_reason("VARIANT_STRAND_COVERAGE");
+    }
+  }
+  
+  if (settings.polymorphism_minimum_total_coverage_each_strand > 0) {
+    bool passed = true;
+    vector<string> top_bot;
+    double top;
+    double bot;
+    
+    top_bot = split(ra[TOTAL_COV], "/");
+    top = from_string<double>(top_bot[0]);
+    bot = from_string<double>(top_bot[1]);
+    passed = passed && (top >= settings.polymorphism_minimum_total_coverage_each_strand);
+    passed = passed && (bot >= settings.polymorphism_minimum_total_coverage_each_strand);
+    
+    if (!passed) {
+      rejected = true;
+      ra.add_reject_reason("TOTAL_STRAND_COVERAGE");
+    }
+  }
+  
+  if (settings.polymorphism_minimum_variant_coverage > 0) {
+    
+    bool passed = true;
+    vector<string> top_bot;
+    double top;
+    double bot;
+    
+    top_bot = split(ra[MAJOR_COV], "/");
+    top = from_string<double>(top_bot[0]);
+    bot = from_string<double>(top_bot[1]);
+    passed = passed && (top+bot >= settings.polymorphism_minimum_variant_coverage);
+    
+    top_bot = split(ra[MINOR_COV], "/");
+    top = from_string<double>(top_bot[0]);
+    bot = from_string<double>(top_bot[1]);
+    passed = passed && (top+bot >= settings.polymorphism_minimum_variant_coverage);
+    
+    if (!passed) {
+      rejected = true;
+      ra.add_reject_reason("VARIANT_COVERAGE");
+    }
+  }
+  
+  if (settings.polymorphism_minimum_total_coverage > 0) {
+    vector<string> top_bot = split(ra[TOTAL_COV], "/");
+    if ( from_string<double>(top_bot[0]) + from_string<double>(top_bot[1]) < settings.polymorphism_minimum_total_coverage ) {
+      ra.add_reject_reason("TOTAL_COVERAGE");
+      rejected = true;
+    }
+  }
+  
+  return rejected;
+}
+  
+bool rejected_RA_consensus_coverage(cDiffEntry& ra,
+                                    cReferenceSequences& ref_seq_info,
+                                    const Settings& settings
+                                    )
+{
+  (void)ref_seq_info;
+  bool rejected = false;
+  
+  if (settings.consensus_minimum_variant_coverage_each_strand > 0) {
+    vector<string> top_bot = split(ra[MAJOR_COV], "/");
+    if ( (from_string<double>(top_bot[0]) < settings.consensus_minimum_variant_coverage_each_strand) ||
+        (from_string<double>(top_bot[1]) < settings.consensus_minimum_variant_coverage_each_strand) ) {
+      ra.add_reject_reason("VARIANT_STRAND_COVERAGE");
+      rejected = true;
+    }
+  }
+  
+  if (settings.consensus_minimum_total_coverage_each_strand > 0) {
+    vector<string> top_bot = split(ra[TOTAL_COV], "/");
+    if ( (from_string<double>(top_bot[0]) < settings.consensus_minimum_variant_coverage_each_strand) ||
+        (from_string<double>(top_bot[1]) < settings.consensus_minimum_variant_coverage_each_strand) ) {
+      ra.add_reject_reason("TOTAL_STRAND_COVERAGE");
+      rejected = true;
+    }
+  }
+  
+  if (settings.consensus_minimum_variant_coverage > 0) {
+    vector<string> top_bot = split(ra[MAJOR_COV], "/");
+    if ( from_string<double>(top_bot[0]) + from_string<double>(top_bot[1]) < settings.consensus_minimum_total_coverage ) {
+      ra.add_reject_reason("VARIANT_COVERAGE");
+      rejected = true;
+    }
+  }
+  
+  if (settings.consensus_minimum_total_coverage > 0) {
+    vector<string> top_bot = split(ra[TOTAL_COV], "/");
+    if ( from_string<double>(top_bot[0]) + from_string<double>(top_bot[1]) < settings.consensus_minimum_total_coverage ) {
+      ra.add_reject_reason("TOTAL_COVERAGE");
+      rejected = true;
     }
   }
   
@@ -293,13 +386,9 @@ bool test_RA_evidence_CONSENSUS_mode(
     ra.add_reject_reason("FREQUENCY_CUTOFF");
   }
   
-  // Drop down to a polymorphism if we don't pass the consensus strand criterion
-  if ( (prediction == consensus) && (settings.consensus_minimum_new_coverage_each_strand > 0) ) {
-    vector<string> top_bot = split(ra[MAJOR_COV], "/");
-    if ( (from_string<double>(top_bot[0]) < settings.consensus_minimum_new_coverage_each_strand) ||
-        (from_string<double>(top_bot[1]) < settings.consensus_minimum_new_coverage_each_strand) ) {
-      ra.add_reject_reason("STRAND_COVERAGE");
-    }
+  // Drop down to a polymorphism if we don't pass the consensus read coverage criterion
+  if (prediction == consensus) {
+    rejected_RA_consensus_coverage(ra, ref_seq_info, settings);
   }
   
   // Succeed and bail now if still consensus prediction or keep as a failed consensus
@@ -431,13 +520,7 @@ bool test_RA_evidence_POLYMORPHISM_mode(
   }
   
   // Drop down to a rejected polymorphism if we don't pass the consensus strand criterion
-  if (settings.consensus_minimum_new_coverage_each_strand > 0) {
-    vector<string> top_bot = split(ra[MAJOR_COV], "/");
-    if ( (from_string<double>(top_bot[0]) < settings.consensus_minimum_new_coverage_each_strand) ||
-        (from_string<double>(top_bot[1]) < settings.consensus_minimum_new_coverage_each_strand) ) {
-      ra.add_reject_reason("STRAND_COVERAGE");
-    }
-  }
+  rejected_RA_consensus_coverage(ra, ref_seq_info, settings);
   
   if (ra.entry_exists(REJECT)) {
     ra[CONSENSUS_REJECT] = ra[REJECT];
@@ -1028,9 +1111,8 @@ void identify_mutations_pileup::pileup_callback(const pileup& p) {
            && (from_string<int32_t>((*(_user_evidence_ra_list.front()))[INSERT_POSITION]) == insert_count)) {
       
       // Note! mut only exists as a valid record for comparison
-      // if output_ra_on_merits is true!!
       if ((passed_as_consensus_prediction || passed_as_polymorphism_prediction) && (*added_mut_p == *(_user_evidence_ra_list.front()))) {
-        // in this case we have already created a valid junction
+        // in this case we have already created a valid RA item
         (*added_mut_p)["user_defined"] = "1";
         
         // do not mark it as user_defined or there will be problems:
@@ -1063,7 +1145,8 @@ void identify_mutations_pileup::pileup_callback(const pileup& p) {
         double polymorphism_bonferroni_score = 10 * (-(log(ppred.likelihood_ratio_test_p_value)/log(10)) - _log10_ref_length);
         
         // These defs of major and minor base are not quite always accurate.
-        // because they only take from ref_base and new_base of the RA line
+        // because they only take into account ref_base and new_base of the RA line
+        // (and there could be a 3rd base that matters)
         // ---> in the future it may be better to KEEP the major and minor alleles and work with
         //      these instead, but that leads to its own issues
         mut[MAJOR_BASE] = (ppred.frequency > 0.5) ? best_base_char : second_best_base_char;
@@ -1072,6 +1155,17 @@ void identify_mutations_pileup::pileup_callback(const pileup& p) {
         
         // The frequency of the variant is always this, due to the way the ref_base is set as best_base_char
         mut[POLYMORPHISM_FREQUENCY] = formatted_double(1 - ppred.frequency, _polymorphism_precision_places, true).to_string();
+        
+        // Consensus mode
+        if (!_settings.polymorphism_prediction) {
+          if (from_string<double>(mut[POLYMORPHISM_FREQUENCY]) > 0.5 ) {
+            mut[FREQUENCY] = "1";
+          } else {
+            mut[FREQUENCY] = "0";
+          }
+        } else { // Polymorphism mode
+          mut[FREQUENCY] =  mut[POLYMORPHISM_FREQUENCY];
+        }
         
         // Genotype quality is for the top called genotype
         mut[CONSENSUS_SCORE] = formatted_double(consensus_bonferroni_score, kMutationScorePrecision).to_string();

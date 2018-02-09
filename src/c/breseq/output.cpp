@@ -792,16 +792,34 @@ void html_summary(const string &file_name, const Settings& settings, Summary& su
     HTML << tr(td("Consensus frequency cutoff")
                + td((settings.consensus_frequency_cutoff == 0) ? "OFF" : to_string<double>(settings.consensus_frequency_cutoff))
                );
-    HTML << tr(td("Consensus minimum coverage each strand")
-               + td((settings.consensus_minimum_new_coverage_each_strand == 0) ? "OFF" : to_string<int32_t>(settings.consensus_minimum_new_coverage_each_strand))
+    HTML << tr(td("Consensus minimum variant coverage each strand")
+               + td((settings.consensus_minimum_variant_coverage_each_strand == 0) ? "OFF" : to_string<int32_t>(settings.consensus_minimum_variant_coverage_each_strand))
+               );
+    HTML << tr(td("Consensus minimum total coverage each strand")
+               + td((settings.consensus_minimum_total_coverage_each_strand == 0) ? "OFF" : to_string<int32_t>(settings.consensus_minimum_total_coverage_each_strand))
+               );
+    HTML << tr(td("Consensus minimum variant coverage")
+               + td((settings.consensus_minimum_variant_coverage == 0) ? "OFF" : to_string<int32_t>(settings.consensus_minimum_variant_coverage))
+               );
+    HTML << tr(td("Consensus minimum total coverage")
+               + td((settings.consensus_minimum_total_coverage == 0) ? "OFF" : to_string<int32_t>(settings.consensus_minimum_total_coverage))
                );
 
     HTML << tr(td("Polymorphism E-value cutoff") + td(s(settings.polymorphism_log10_e_value_cutoff)));
     HTML << tr(td("Polymorphism frequency cutoff")
                + td((settings.polymorphism_frequency_cutoff == 0) ? "OFF" : to_string<double>(settings.polymorphism_frequency_cutoff))
                );
-    HTML << tr(td("Polymorphism minimum coverage each strand") 
-               + td((settings.polymorphism_minimum_new_coverage_each_strand == 0) ? "OFF" : to_string<int32_t>(settings.polymorphism_minimum_new_coverage_each_strand))
+    HTML << tr(td("Polymorphism minimum variant coverage each strand")
+               + td((settings.polymorphism_minimum_variant_coverage_each_strand == 0) ? "OFF" : to_string<int32_t>(settings.polymorphism_minimum_variant_coverage_each_strand))
+               );
+    HTML << tr(td("Polymorphism minimum total coverage each strand")
+               + td((settings.polymorphism_minimum_total_coverage_each_strand == 0) ? "OFF" : to_string<int32_t>(settings.polymorphism_minimum_total_coverage_each_strand))
+               );
+    HTML << tr(td("Polymorphism minimum variant coverage")
+               + td((settings.polymorphism_minimum_variant_coverage == 0) ? "OFF" : to_string<int32_t>(settings.polymorphism_minimum_variant_coverage))
+               );
+    HTML << tr(td("Polymorphism minimum total coverage")
+               + td((settings.polymorphism_minimum_total_coverage == 0) ? "OFF" : to_string<int32_t>(settings.polymorphism_minimum_total_coverage))
                );
     HTML << tr(td("Polymorphism bias cutoff") 
                + td((settings.polymorphism_bias_p_value_cutoff == 0) ? "OFF" : to_string<double>(settings.polymorphism_bias_p_value_cutoff))
@@ -1842,10 +1860,23 @@ string decode_reject_reason(const string& reject)
   {
     return "Biased read strand distribution supporting prediction.";
   }
-  else if (reject == "STRAND_COVERAGE")
+  else if (reject == "VARIANT_COVERAGE")
   {
-    return "Not supported by required number of reads on both strands.";
+    return "Variant not supported by required number of total reads.";
   }
+  else if (reject == "TOTAL_COVERAGE")
+  {
+    return "Genome position does not have required minimum number of aligned reads.";
+  }
+  else if (reject == "VARIANT_STRAND_COVERAGE")
+  {
+    return "Variant not supported by required number of reads on each strand.";
+  }
+  else if (reject == "TOTAL_STRAND_COVERAGE")
+  {
+    return "Genome position does not have required minimum number of aligned reads on each strand.";
+  }
+  
   else if (reject == "INDEL_HOMOPOLYMER")
   {
     return "Polymorphic indel expands or contracts a homopolymer stretch.";
@@ -2258,9 +2289,9 @@ void Html_Mutation_Table_String::Item_Lines()
     if (!settings.no_evidence) {
       bool already_added_RA = false;
        
-      diff_entry_list_t mutation_evidence_list = gd.mutation_evidence_list(mut);
+      diff_entry_list_t in_evidence_list = gd.in_evidence_list(mut);
       
-      for (diff_entry_list_t::iterator evitr = mutation_evidence_list.begin(); evitr != mutation_evidence_list.end(); evitr ++) {  
+      for (diff_entry_list_t::iterator evitr = in_evidence_list.begin(); evitr != in_evidence_list.end(); evitr ++) {  
         cDiffEntry& evidence_item = **evitr;
 
         if (evidence_item._type == RA) {
@@ -2481,9 +2512,13 @@ cOutputEvidenceFiles::cOutputEvidenceFiles(const Settings& settings, cGenomeDiff
   {  
     diff_entry_ptr_t item(*itr);
     
-    diff_entry_ptr_t parent_item(gd.parent(*item));
-    if (parent_item.get() == NULL)
+    diff_entry_ptr_t parent_item;
+    diff_entry_list_t parents = gd.using_evidence_list(*item);
+    if (parents.size() > 0)
+      parent_item = parents.front();
+    else {
       parent_item = *itr;
+    }
     
     add_evidence(_SIDE_1_EVIDENCE_FILE_NAME,
                  item,
@@ -2529,7 +2564,7 @@ cOutputEvidenceFiles::cOutputEvidenceFiles(const Settings& settings, cGenomeDiff
   for (diff_entry_list_t::iterator itr = items_SNP_INS_DEL_SUB.begin(); itr != items_SNP_INS_DEL_SUB.end(); itr ++) 
   {  
     diff_entry_ptr_t item = *itr;
-    diff_entry_list_t mutation_evidence_list = gd.mutation_evidence_list(*item);
+    diff_entry_list_t in_evidence_list = gd.in_evidence_list(*item);
     
     // #this reconstructs the proper columns to draw
     uint32_t start = from_string<uint32_t>((*item)[POSITION]);
@@ -2542,7 +2577,7 @@ cOutputEvidenceFiles::cOutputEvidenceFiles(const Settings& settings, cGenomeDiff
     
     if (item->_type == INS) 
     {
-      diff_entry_list_t ins_evidence_list = gd.mutation_evidence_list(*item);
+      diff_entry_list_t ins_evidence_list = gd.in_evidence_list(*item);
       ASSERT(ins_evidence_list.size() != 0, "Could not find evidence for INS entry:\n" + item->as_string());
       
       if (ins_evidence_list.front()->_type == RA) {
@@ -2558,7 +2593,7 @@ cOutputEvidenceFiles::cOutputEvidenceFiles(const Settings& settings, cGenomeDiff
     else if (item->_type == DEL) 
     {
       bool has_ra_evidence = false;
-      for (diff_entry_list_t::iterator itr = mutation_evidence_list.begin(); itr != mutation_evidence_list.end(); itr ++) 
+      for (diff_entry_list_t::iterator itr = in_evidence_list.begin(); itr != in_evidence_list.end(); itr ++) 
       {  
         cDiffEntry& evidence_item = **itr;
         if (evidence_item._type == RA) has_ra_evidence = true;
@@ -2588,7 +2623,7 @@ cOutputEvidenceFiles::cOutputEvidenceFiles(const Settings& settings, cGenomeDiff
     
     
     // Add evidence to RA items as well
-    for (diff_entry_list_t::iterator itr = mutation_evidence_list.begin(); itr != mutation_evidence_list.end(); itr ++) 
+    for (diff_entry_list_t::iterator itr = in_evidence_list.begin(); itr != in_evidence_list.end(); itr ++) 
     {  
       cDiffEntry& evidence_item = **itr;
       if (evidence_item._type != RA) continue;
@@ -2632,9 +2667,13 @@ cOutputEvidenceFiles::cOutputEvidenceFiles(const Settings& settings, cGenomeDiff
   {  
     diff_entry_ptr_t item = *itr;
     
-    diff_entry_ptr_t parent_item(gd.parent(*item));
-    if (parent_item.get() == NULL)
+    diff_entry_ptr_t parent_item;
+    diff_entry_list_t parents = gd.using_evidence_list(*item);
+    if (parents.size() > 0)
+      parent_item = parents.front();
+    else {
       parent_item = *itr;
+    }
     
     uint32_t start = from_string<uint32_t>((*item)[FLANKING_LEFT]);
     uint32_t end = from_string<uint32_t>((*item)[FLANKING_LEFT]) + 1 + abs(from_string<int32_t>((*item)[ALIGNMENT_OVERLAP]));
@@ -2775,7 +2814,7 @@ cOutputEvidenceFiles::html_evidence_file (
   HTML << html_genome_diff_item_table_string(settings, gd, parent_list);
   HTML << "<p>";
   
-  diff_entry_list_t evidence_list = gd.mutation_evidence_list(*parent_item);
+  diff_entry_list_t evidence_list = gd.in_evidence_list(*parent_item);
   
   vector<gd_entry_type> types = make_vector<gd_entry_type>(RA)(MC)(JC);
   
@@ -2815,9 +2854,11 @@ cOutputEvidenceFiles::html_evidence_file (
     if (settings.base_quality_cutoff != 0)
       item["base_quality_cutoff"] = to_string(settings.base_quality_cutoff);
     
-    alignment_output ao(item[BAM_PATH], item[FASTA_PATH], settings.max_displayed_reads, settings.base_quality_cutoff, settings.junction_minimum_side_match, settings.alignment_mask_ref_matches );
+    if ( file_exists(item[BAM_PATH].c_str()) && file_exists(item[FASTA_PATH].c_str()) ) {
+      alignment_output ao(item[BAM_PATH], item[FASTA_PATH], settings.max_displayed_reads, settings.base_quality_cutoff, settings.junction_minimum_side_match, settings.alignment_mask_ref_matches );
     
-    HTML << ao.html_alignment(ss.str(), &item);
+      HTML << ao.html_alignment(ss.str(), &item);
+    }
     
   }
   HTML << html_footer();

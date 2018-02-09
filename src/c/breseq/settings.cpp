@@ -202,6 +202,7 @@ namespace breseq
     ("contig-reference,c", "File containing reference sequences in GenBank, GFF3, or FASTA format. The same coverage distribution will be fit to all of the reference sequences in this file simultaneously. This is appropriate when they are all contigs from a genome that should be present with the same copy number. Use of this option will improve performance when there are many contigs and especially when some are very short (≤1,000 bases).", NULL, ADVANCED_OPTION)
     ("junction-only-reference,s", "File containing reference sequences in GenBank, GFF3, or FASTA format. These references are only used for calling junctions with other reference sequences. An example of appropriate usage is including a transposon sequence not present in a reference genome. Option may be provided multiple times for multiple files.", NULL, ADVANCED_OPTION)
     ("targeted-sequencing,t", "Reference sequences were targeted for ultra-deep sequencing (using pull-downs or amplicons). Do not fit coverage distribution.", TAKES_NO_ARGUMENT, ADVANCED_OPTION)
+    ("user-evidence-gd","User supplied Genome Diff file of JC and/or RA evidence items. The breseq output will report the support for these sequence changes even if they do not pass the normal filters for calling mutations in this sample.", "", ADVANCED_OPTION)
     ;
     
     
@@ -217,7 +218,7 @@ namespace breseq
     ;
     
     options.addUsage("", ADVANCED_OPTION);
-    options.addUsage("bowtie2 mapping/alignment options", ADVANCED_OPTION);
+    options.addUsage("Bowtie2 Mapping/Alignment Options", ADVANCED_OPTION);
     options
     ("bowtie2-scoring", "All calls to bowtie2 must use the same commands for assigning scores to read alignments. Larger scores are assumed to be better by breseq. Each call to bowtie2 has this option added to its command line. (DEFAULT=\"" + this->bowtie2_scoring + "\")", "", ADVANCED_OPTION)
     ("bowtie2-stage1", "Settings for mapping criteria used for the stage 1 alignment. This step is normally meant for quickly aligning near-perfect matches. (DEFAULT=\"" + this->bowtie2_stage1 + "\")", "", ADVANCED_OPTION)
@@ -245,7 +246,10 @@ namespace breseq
     options
     ("consensus-score-cutoff", "Log10 E-value cutoff for consensus base substitutions and small indels (DEFAULT = 10)", "", ADVANCED_OPTION)
     ("consensus-frequency-cutoff", "Only predict consensus mutations when the variant allele frequency is above this value. (DEFAULT = consensus mode, 0.8; polymorphism mode, 0.0)", "", ADVANCED_OPTION)
-    ("consensus-minimum-coverage-each-strand", "Only predict consensus mutations when at least this many reads on each strand support the mutation. (DEFAULT = consensus mode, 0; polymorphism mode, 0)", "", ADVANCED_OPTION)
+    ("consensus-minimum-variant-coverage", "Only predict consensus mutations when at least this many reads support the mutation. (DEFAULT = consensus mode, 0; polymorphism mode, 0)", "", ADVANCED_OPTION)
+    ("consensus-minimum-total-coverage", "Only predict consensus mutations when at least this many reads total are aligned to a genome position. (DEFAULT = consensus mode, 0; polymorphism mode, 0)", "", ADVANCED_OPTION)
+    ("consensus-minimum-variant-coverage-each-strand", "Only predict consensus mutations when at least this many reads on each strand support the mutation. (DEFAULT = consensus mode, 0; polymorphism mode, 0)", "", ADVANCED_OPTION)
+    ("consensus-minimum-total-coverage-each-strand", "Only predict consensus mutations when at least this many reads on each strand are aligned to a genome position. (DEFAULT = consensus mode, 0; polymorphism mode, 0)", "", ADVANCED_OPTION)
     ;
 
     options.addUsage("", ADVANCED_OPTION);
@@ -254,7 +258,10 @@ namespace breseq
 
     ("polymorphism-score-cutoff", "Log10 E-value cutoff for test of polymorphism vs no polymorphism (DEFAULT = consensus mode, 10; polymorphism mode, 2)", "", ADVANCED_OPTION)
     ("polymorphism-frequency-cutoff", "Only predict polymorphisms when the minor variant allele frequency is greater than this value. For example, a setting of 0.05 will reject all polymorphisms with a non-reference frequency of <0.05, and any variants with a non-reference frequency of ≥ 0.95 (which is 1 - 0.05) will be rejected as polymorphisms and instead predicted to be consensus mutations (DEFAULT = consensus mode, 0.2; polymorphism mode, 0.05)", "", ADVANCED_OPTION)
-    ("polymorphism-minimum-coverage-each-strand", "Only predict polymorphisms for which at least this many reads on each strand support each alternative allele. (DEFAULT = consensus mode, 0; polymorphism mode, 2)", "", ADVANCED_OPTION)
+    ("polymorphism-minimum-variant-coverage", "Only predict polymorphisms when at least this many reads support each alternative allele. (DEFAULT = consensus mode, 0; polymorphism mode, 0)", "", ADVANCED_OPTION)
+    ("polymorphism-minimum-total-coverage", "Only predict polymorphisms when at least this many reads total are aligned to a genome position. (DEFAULT = consensus mode, 0; polymorphism mode, 0)", "", ADVANCED_OPTION)
+    ("polymorphism-minimum-variant-coverage-each-strand", "Only predict polymorphisms when at least this many reads on each strand support each alternative allele. (DEFAULT = consensus mode, 0; polymorphism mode, 2)", "", ADVANCED_OPTION)
+    ("polymorphism-minimum-total-coverage-each-strand", "Only predict polymorphisms when at least this many reads on each strand are aligned to a genome position. (DEFAULT = consensus mode, 0; polymorphism mode, 0)", "", ADVANCED_OPTION)
     ("polymorphism-bias-cutoff", "P-value criterion for Fisher's exact test for strand bias AND K-S test for quality score bias. (0 = OFF) (DEFAULT = consensus mode, OFF; polymorphism mode, OFF)", "", ADVANCED_OPTION)
     ("polymorphism-no-indels", "Do not predict insertion/deletion polymorphisms from read alignment evidence", TAKES_NO_ARGUMENT, ADVANCED_OPTION)
     ("polymorphism-reject-indel-homopolymer-length", "Reject insertion/deletion polymorphisms which could result from expansion/contraction of homopolymer repeats with this length or greater in the reference genome (0 = OFF) (DEFAULT = consensus mode, OFF; polymorphism mode, 3) ", "", ADVANCED_OPTION)
@@ -281,7 +288,6 @@ namespace breseq
     options.addUsage("", ADVANCED_OPTION);
     options.addUsage("Experimental Options (Use at your own risk)", ADVANCED_OPTION);
     options
-    ("user-evidence-gd","User supplied genome diff file of JC or RA evidence to report support for, regardless of whether they would have been predicted as mutations.", "", ADVANCED_OPTION)
     ("cnv","Do experimental copy number variation prediction",TAKES_NO_ARGUMENT, ADVANCED_OPTION)
     ("cnv-tile-size", "Tile size for copy number variation prediction", 500, ADVANCED_OPTION)
     ("cnv-ignore-redundant", "Only consider non-redundant coverage when using cnv", TAKES_NO_ARGUMENT, ADVANCED_OPTION)
@@ -450,11 +456,17 @@ namespace breseq
       
       this->mutation_log10_e_value_cutoff = 10;
       this->consensus_frequency_cutoff = 0; // zero is OFF - ensures any rejected poly with high freq move to consensus!
-      this->consensus_minimum_new_coverage_each_strand = 0;
+      this->consensus_minimum_variant_coverage = 0;
+      this->consensus_minimum_total_coverage = 0;
+      this->consensus_minimum_variant_coverage_each_strand = 0;
+      this->consensus_minimum_total_coverage_each_strand = 0;
       
       this->polymorphism_log10_e_value_cutoff = 2;
       this->polymorphism_frequency_cutoff = 0.05;
-      this->polymorphism_minimum_new_coverage_each_strand = 2;
+      this->polymorphism_minimum_variant_coverage = 0;
+      this->polymorphism_minimum_total_coverage = 0;
+      this->polymorphism_minimum_variant_coverage_each_strand = 2;
+      this->polymorphism_minimum_total_coverage_each_strand = 0;
       
       this->mixed_base_prediction = false;
       this->polymorphism_reject_indel_homopolymer_length = 3; // zero is OFF!
@@ -474,11 +486,17 @@ namespace breseq
 
       this->mutation_log10_e_value_cutoff = 10;
       this->consensus_frequency_cutoff = 0.8;
-      this->consensus_minimum_new_coverage_each_strand = 0;
+      this->consensus_minimum_variant_coverage = 0;
+      this->consensus_minimum_total_coverage = 0;
+      this->consensus_minimum_variant_coverage_each_strand = 0;
+      this->consensus_minimum_total_coverage_each_strand = 0;
       
       this->polymorphism_log10_e_value_cutoff = 10;
       this->polymorphism_frequency_cutoff = 0.2;
-      this->polymorphism_minimum_new_coverage_each_strand = 0;
+      this->polymorphism_minimum_variant_coverage = 0;
+      this->polymorphism_minimum_total_coverage = 0;
+      this->polymorphism_minimum_variant_coverage_each_strand = 0;
+      this->polymorphism_minimum_total_coverage_each_strand = 0;
 
       this->polymorphism_reject_indel_homopolymer_length = 0; // zero is OFF!
       this->polymorphism_reject_surrounding_homopolymer_length = 0; // zero is OFF!
@@ -506,11 +524,28 @@ namespace breseq
     }
     if (options.count("consensus-frequency-cutoff"))
       this->consensus_frequency_cutoff = from_string<double>(options["consensus-frequency-cutoff"]);
-    if (options.count("consensus-minimum-coverage-each-strand"))
-      this->consensus_minimum_new_coverage_each_strand = from_string<uint32_t>(options["consensus-minimum-coverage-each-strand"]);
+    
+    if (options.count("consensus-minimum-variant-coverage"))
+      this->consensus_minimum_variant_coverage = from_string<uint32_t>(options["consensus-minimum-variant-coverage"]);
+    if (options.count("consensus-minimum-total-coverage"))
+      this->consensus_minimum_total_coverage = from_string<uint32_t>(options["consensus-minimum-total-coverage"]);
+    if (options.count("consensus-minimum-variant-coverage-each-strand"))
+      this->consensus_minimum_variant_coverage_each_strand = from_string<uint32_t>(options["consensus-minimum-variant-coverage-each-strand"]);
+    if (options.count("consensus-minimum-total-coverage-each-strand"))
+      this->consensus_minimum_total_coverage_each_strand = from_string<uint32_t>(options["consensus-minimum-total-coverage-each-strand"]);
     
     if (options.count("polymorphism-frequency-cutoff"))
       this->polymorphism_frequency_cutoff = from_string<double>(options["polymorphism-frequency-cutoff"]);
+    
+    if (options.count("polymorphism-minimum-variant-coverage"))
+      this->polymorphism_minimum_variant_coverage = from_string<uint32_t>(options["polymorphism-minimum-variant-coverage"]);
+    if (options.count("polymorphism-minimum-total-coverage"))
+      this->polymorphism_minimum_total_coverage = from_string<uint32_t>(options["polymorphism-minimum-total-coverage"]);
+    if (options.count("polymorphism-minimum-variant-coverage-each-strand"))
+      this->polymorphism_minimum_variant_coverage_each_strand = from_string<uint32_t>(options["polymorphism-minimum-variant-coverage-each-strand"]);
+    if (options.count("polymorphism-minimum-total-coverage-each-strand"))
+      this->polymorphism_minimum_total_coverage_each_strand = from_string<uint32_t>(options["polymorphism-minimum-total-coverage-each-strand"]);
+    
     if (options.count("polymorphism-no-indels"))
       this->no_indel_polymorphisms = options.count("polymorphism-no-indels");
     if (options.count("polymorphism-reject-indel-homopolymer-length"))
@@ -527,8 +562,6 @@ namespace breseq
     }
     if (options.count("polymorphism-bias-cutoff"))
       this->polymorphism_bias_p_value_cutoff = from_string<double>(options["polymorphism-bias-cutoff"]);
-    if (options.count("polymorphism-minimum-coverage-each-strand"))
-      this->polymorphism_minimum_new_coverage_each_strand = from_string<uint32_t>(options["polymorphism-minimum-coverage-each-strand"]);
 
     // Warn of possibly confusing settings
     if (this->consensus_frequency_cutoff > 1 - this->polymorphism_frequency_cutoff) {
@@ -562,6 +595,18 @@ namespace breseq
       this->header_genome_diff_file_name = options["header-genome-diff"];
   
 		this->post_option_initialize();
+    
+    //////// Check here for any conflicting options
+    
+    /*
+    if (this->user_evidence_genome_diff_file_name.size() && !this->polymorphism_prediction) {
+      ERROR("You must run breseq in polymorphism mode (-p) when supplying --user-evidence-gd.");
+    }
+    */
+    
+    ////////
+    
+    
     
     // Log the command line
     time_t stamp_time = time(NULL);
@@ -722,10 +767,18 @@ namespace breseq
     this->polymorphism_prediction = false;
     this->mixed_base_prediction = true;
     
+    this->consensus_minimum_variant_coverage = 0;
+    this->consensus_minimum_total_coverage = 0;
+    this->consensus_minimum_variant_coverage_each_strand = 0;
+    this->consensus_minimum_total_coverage_each_strand = 0;
+    
     this->polymorphism_log10_e_value_cutoff = this->mutation_log10_e_value_cutoff;
 		this->polymorphism_bias_p_value_cutoff = 0;
 		this->polymorphism_frequency_cutoff = 0.1;
-		this->polymorphism_minimum_new_coverage_each_strand = 0;
+		this->polymorphism_minimum_variant_coverage = 0;
+    this->polymorphism_minimum_total_coverage = 0;
+    this->polymorphism_minimum_variant_coverage_each_strand = 0;
+    this->polymorphism_minimum_total_coverage_each_strand = 0;
     this->polymorphism_reject_indel_homopolymer_length = 0;
     this->polymorphism_reject_surrounding_homopolymer_length = 0;
 		this->no_indel_polymorphisms = false;

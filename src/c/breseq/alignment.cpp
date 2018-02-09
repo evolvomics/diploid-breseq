@@ -118,6 +118,12 @@ pair<uint32_t,uint32_t> alignment_wrapper::query_bounds_1(uint32_t min_qual) con
   uint32_t* cigar = bam1_cigar(_a); // cigar array for this alignment
 	uint32_t start=1, end=bam_cigar2qlen(&_a->core,cigar);
 	
+  /*
+  if (this->read_name()=="1:369") {
+    cout << "debug" << end;
+  }
+  */
+  
 	// start:
   uint32_t i;
   uint32_t op;
@@ -125,11 +131,16 @@ pair<uint32_t,uint32_t> alignment_wrapper::query_bounds_1(uint32_t min_qual) con
   for(i=0; i<=_a->core.n_cigar; i++) {
     op = cigar[i] & BAM_CIGAR_MASK;
     len = cigar[i] >> BAM_CIGAR_SHIFT;
-    // if we encounter padding, or a gap in reference then we are done
-    if((op != BAM_CSOFT_CLIP) && (op != BAM_CHARD_CLIP) && (op != BAM_CREF_SKIP)) {
+    
+    // Skip any operations that don't involve aligning bases to the reference
+    if( (op != BAM_CSOFT_CLIP) && (op != BAM_CHARD_CLIP) && (op != BAM_CREF_SKIP) ) {
 			break;
     }
-    start += len;
+    
+    // Only move forward our position in read for soft clipping
+    if(op == BAM_CSOFT_CLIP) {
+      start += len;
+    }
   }
   
   //move past low quality bases
@@ -137,15 +148,21 @@ pair<uint32_t,uint32_t> alignment_wrapper::query_bounds_1(uint32_t min_qual) con
     
     for(; i<=_a->core.n_cigar; i++) {
       
+      // Skip operations that don't involve read bases being aligned
       if((op != BAM_CSOFT_CLIP) && (op != BAM_CHARD_CLIP) && (op != BAM_CREF_SKIP) && (op != BAM_CINS)) {
         for(uint32_t j=0; j<len; j++) {
-          if (read_base_quality_1(start+j) > min_qual) {
-            start = start + j;
+          if (read_base_quality_1(start) > min_qual) {
             goto finish_start;
           }
+          start++;
         }
       }
-      start += len;
+      
+      // Only move forward our position in read for soft clipping
+      if (op == BAM_CSOFT_CLIP) {
+        start += len;
+      }
+      
       op = cigar[i] & BAM_CIGAR_MASK;
       len = cigar[i] >> BAM_CIGAR_SHIFT;
     }
@@ -159,11 +176,15 @@ pair<uint32_t,uint32_t> alignment_wrapper::query_bounds_1(uint32_t min_qual) con
   for(i=_a->core.n_cigar-1; i>0; --i) {
     op = cigar[i] & BAM_CIGAR_MASK;
     len = cigar[i] >> BAM_CIGAR_SHIFT;    
-    // if we encounter padding, or a gap in reference then we are done
-    if((op != BAM_CSOFT_CLIP) && (op != BAM_CHARD_CLIP) && (op != BAM_CREF_SKIP) ) {
+    // skip any operations that don't involve aligning bases to the reference
+    if( (op != BAM_CSOFT_CLIP) && (op != BAM_CHARD_CLIP) && (op != BAM_CREF_SKIP) ) {
       break;
     }
-    end -= len;
+    
+    // Only move forward our position in read for soft clipping
+    if(op == BAM_CSOFT_CLIP) {
+      end -= len;
+    }
   }
   
   //move past low quality bases
@@ -171,15 +192,19 @@ pair<uint32_t,uint32_t> alignment_wrapper::query_bounds_1(uint32_t min_qual) con
 
     for(; i>0; --i) {
       
+      // Skip operations that don't involve read bases being aligned
       if((op != BAM_CSOFT_CLIP) && (op != BAM_CHARD_CLIP) && (op != BAM_CREF_SKIP) && (op != BAM_CINS)) {
         for(uint32_t j=0; j<len; j++) {
-          if (read_base_quality_1(end-j) > min_qual) {
-            end = end-j;
+          if (read_base_quality_1(end) > min_qual) {
             goto finish_end;
           }
+          end--;
         }
       }
-      end -= len;
+      // Only move backward our position in read for soft clipping
+      if (op == BAM_CSOFT_CLIP) {
+        end -= len;
+      }
       op = cigar[i] & BAM_CIGAR_MASK;
       len = cigar[i] >> BAM_CIGAR_SHIFT;
     }
@@ -285,13 +310,16 @@ uint32_t alignment_wrapper::reference_start_0(uint32_t min_qual) const
       
       if((op != BAM_CSOFT_CLIP) && (op != BAM_CHARD_CLIP) && (op != BAM_CREF_SKIP) && (op != BAM_CDEL)) {
         for(uint32_t j=0; j<len; j++) {
-          if (read_base_quality_1(start+j) > min_qual) {
-            start = start + j;
+          if (read_base_quality_1(start) > min_qual) {
             goto finish_start;
           }
+          start++;
         }
       }
-      start += len;
+      // only move reference position for ref-skip or deletion in read releative to reference 
+      if ((op == BAM_CREF_SKIP) || (op == BAM_CDEL)) {
+        start += len;
+      }
       op = cigar[i] & BAM_CIGAR_MASK;
       len = cigar[i] >> BAM_CIGAR_SHIFT;
     }
@@ -323,7 +351,6 @@ uint32_t alignment_wrapper::reference_end_1(uint32_t min_qual ) const
   uint32_t end = bam_calend(&_a->core, bam1_cigar(_a));
   
   if (min_qual) {
-    uint32_t query_pos_1 = read_length();
     uint32_t* cigar = bam1_cigar(_a); // cigar array for this alignment
 
     uint32_t i;
@@ -336,7 +363,6 @@ uint32_t alignment_wrapper::reference_end_1(uint32_t min_qual ) const
       if((op != BAM_CSOFT_CLIP) && (op != BAM_CHARD_CLIP) && (op != BAM_CREF_SKIP)) {
         break;
       }
-      query_pos_1 -=len;
     }
   
   //move past low quality bases
@@ -345,12 +371,15 @@ uint32_t alignment_wrapper::reference_end_1(uint32_t min_qual ) const
       
       if((op != BAM_CSOFT_CLIP) && (op != BAM_CHARD_CLIP) && (op != BAM_CREF_SKIP) && (op != BAM_CDEL)) {
         for(uint32_t j=0; j<len; j++) {
-          if (read_base_quality_1(end-j) > min_qual) {
-            end = end-j;
+          if (read_base_quality_1(end) > min_qual) {
             goto finish_end;
           }
+          end--;
         }
-        end -= len;
+      }
+      
+      if ((op == BAM_CREF_SKIP) || (op == BAM_CDEL)) {
+        end -=len;
       }
 
       op = cigar[i] & BAM_CIGAR_MASK;
@@ -728,6 +757,7 @@ void tam_file::write_alignments(
 	}
 }
 
+// splits one alignment into multiple separate entries if it has indels
 void tam_file::write_split_alignment(uint32_t min_indel_split_len, const alignment_wrapper& a, const alignment_list& alignments)
 {
   // Debug
@@ -861,20 +891,21 @@ void tam_file::write_split_alignment(uint32_t min_indel_split_len, const alignme
 // This is probably the most complicated function in all of breseq.
 // Abandon all hope, ye who enter here.
 /*
-	$a, 					# CJ: SAM alignment object for the read to the candidate junction
-	$fastq_file_index, 		# which fastq file this read came from
-	$seq_id, 				# REFERENCE: sequence id
-	$reference_pos, 		# REFERENCE: position of this junction side
-	$reference_strand, 		# REFERENCE: strand of this junction side (-1 or +1)
-	$reference_overlap, 	# REFERENCE: amount of overlap in the reference coords on this side
-	$junction_side, 		# CJ: side of the junction (0 or 1) that we are writing
-	$junction_flanking, 	# CJ: number of bases before overlap in the candidate junction sequence
-	$junction_overlap, 		# CJ: amount of overlap in the candidate junction sequence that we aligned to
-	$trim					# CJ: list with two items, indicating what the trim on each end is
+	a, 					                  # SAM alignment object for the read to the candidate junction
+  readjunction_reference_name,  # Name of junction reference for this alignment (only used for debug output)
+	fastq_file_index, 		        # Which fastq file this read came from
+	seq_id, 				              # REFERENCE: sequence id
+	reference_pos, 		            # REFERENCE: position of this junction side
+	reference_strand, 		        # REFERENCE: strand of this junction side (-1 or +1)
+	reference_overlap, 	          # REFERENCE: amount of overlap in the reference coords on this side
+  junction_side, 		            # JUNCTION: side of the junction (0 or 1) that we are writing
+	junction_flanking, 	          # JUNCTION: number of bases before overlap in the candidate junction sequence
+	junction_overlap, 		        # JUNCTION: amount of overlap in the candidate junction sequence that we aligned to
+	trim					                # List with two items, indicating what the trim on each end is
 */
 void tam_file::write_moved_alignment(
                                      const alignment_wrapper& a, 
-                                     const string& rname,
+                                     const string& junction_reference_name,
                                      uint32_t fastq_file_index, 
                                      const string& seq_id, 
                                      int32_t reference_pos, 
@@ -895,7 +926,7 @@ void tam_file::write_moved_alignment(
 	if (verbose)
 	{
 		cerr << "qname                 = " << a.read_name() << endl;
-		cerr << "rname                 = " << rname << endl;
+		cerr << "junction_ref_name     = " << junction_reference_name << endl;
 		cerr << "seq_id                = " << seq_id << endl;
 		cerr << "reference_pos	       = " << reference_pos << endl;
 		cerr << "reference_strand      = " << reference_strand << endl;
@@ -1181,6 +1212,7 @@ void tam_file::write_moved_alignment(
 	//// is correct and that there are no negative nums
 	stringstream cigar_string_ss;
 	uint32_t cigar_length = 0;
+  bool all_soft_padded = true;
 	for (uint32_t i = 0; i < cigar_list.size(); i++) //CIGAR
 	{
 		char op = cigar_list[i].first;
@@ -1189,8 +1221,15 @@ void tam_file::write_moved_alignment(
 		assert(len > 0);
 		cigar_string_ss << len << op;
 		if (op != 'D') cigar_length += len;
+    if (op != 'S') all_soft_padded = false;
 	}
 	string cigar_string = cigar_string_ss.str();
+  
+  ////
+  //// Don't write if this side turns out to be all soft-padded!  Issue #146
+  ////
+  
+  if (all_soft_padded) return;
   
 	////
 	//// Assemble the quality score string

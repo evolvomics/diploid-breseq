@@ -1627,7 +1627,7 @@ int breseq_default_action(int argc, char* argv[])
   // 05 alignment_correction
 	// * Resolve matches to new junction candidates
 	//
-	if (settings.do_step(settings.alignment_correction_done_file_name, "Resolving alignments with junction candidates"))
+	if (settings.do_step(settings.alignment_correction_done_file_name, "Resolving best read alignments"))
 	{
 		create_path(settings.alignment_resolution_path);
 
@@ -2159,14 +2159,15 @@ int breseq_default_action(int argc, char* argv[])
     // Add read count information to the JC entries -- call fails if no predictions, because BAM does not exist
     MutationPredictor mpj(ref_seq_info);
     mpj.prepare_junctions(settings, summary, jc_gd); // this step has to be done twice currently, which is a bit wasteful
+    
     assign_junction_read_counts(settings, summary, jc_gd);
 
     cGenomeDiff ra_mc_gd(settings.ra_mc_genome_diff_file_name);
     test_RA_evidence(ra_mc_gd, ref_seq_info, settings);
     
     cGenomeDiff evidence_gd;
-    evidence_gd.fast_merge(jc_gd);
-    evidence_gd.fast_merge(ra_mc_gd);
+    evidence_gd.merge_preserving_duplicates(jc_gd);
+    evidence_gd.merge_preserving_duplicates(ra_mc_gd);
     
     // there is a copy number genome diff for each sequence separately
     if (settings.do_copy_number_variation) {
@@ -2174,7 +2175,7 @@ int breseq_default_action(int argc, char* argv[])
         cAnnotatedSequence& seq = *it;
         string this_copy_number_variation_cn_genome_diff_file_name = settings.file_name(settings.copy_number_variation_cn_genome_diff_file_name, "@", seq.m_seq_id);
         cGenomeDiff cn_gd(this_copy_number_variation_cn_genome_diff_file_name);
-        evidence_gd.fast_merge(cn_gd);
+        evidence_gd.merge_preserving_duplicates(cn_gd);
       }
     }
     evidence_gd.write(settings.evidence_genome_diff_file_name);
