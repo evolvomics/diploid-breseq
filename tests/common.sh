@@ -19,8 +19,8 @@ then
 	exit
 fi
 
-BRESEQ="${TESTBINPREFIX}/breseq"
-GDTOOLS="${TESTBINPREFIX}/gdtools"
+BRESEQ="${TESTBINPREFIX}/diploid-breseq"
+GDTOOLS="${TESTBINPREFIX}/diploid-gdtools"
 
 # path to test data:
 DATADIR=${COMMONDIR}/data
@@ -66,7 +66,8 @@ do_show() {
 do_check() {
 	NEEDS_UPDATING=0
     for EXPECTED_OUTPUT in "${EXPECTED_OUTPUTS[@]}"; do  
-		if [[ ! -e ${1}/${EXPECTED_OUTPUT} ]]; then
+    echo $EXPECTED_OUTPUT
+		if [[ ! -e ${EXPECTED_OUTPUT} ]]; then
 			NEEDS_UPDATING=1
 		fi
 	done
@@ -91,7 +92,6 @@ do_check() {
 #       	exit -1
 #       fi
 #    done
-    pushd $1 > /dev/null
     echo ""
 #   CHK=`${HASH} -s --check ${EXPECTED} 2>&1`
 	for (( i=0; i<${#EXPECTED_OUTPUTS[@]}; i++ )); do
@@ -104,7 +104,6 @@ do_check() {
 			${DIFF_BIN} ${CURRENT_OUTPUTS[$i]} ${EXPECTED_OUTPUTS[$i]}
 			echo "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" 
 			echo ""
-			popd > /dev/null
 			if [[ -n "${REFERENCE_ARG+1}" ]]; then
 				echo ${GDTOOLS} COMPARE ${REFERENCE_ARG} -o ${SELF}/failed_compare.html ${SELF}/${CURRENT_OUTPUTS[$i]} ${SELF}/${EXPECTED_OUTPUTS[$i]}
 				${GDTOOLS} COMPARE ${REFERENCE_ARG} -o ${SELF}/failed_compare.html ${SELF}/${CURRENT_OUTPUTS[$i]} ${SELF}/${EXPECTED_OUTPUTS[$i]}
@@ -114,7 +113,6 @@ do_check() {
 			echo "Passed check"
 			echo "OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO"
 			echo ""
-			popd > /dev/null
 			if [ -e "${SELF}/failed_compare.html" ]; then
 				rm -Rf ${SELF}/failed_compare.html
 			fi

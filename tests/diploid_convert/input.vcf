@@ -1,0 +1,5 @@
+##fileformat=VCF
+#CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO	FORMAT 	SAMPLE
+REL606-5	1	.	C	T,G	.	.	.	GT	0/1/2
+REL606-5	2	.	T	C	.	.	.	GT	0/1/0
+REL606-5	3	.	T	G	.	.	.	GT	0/1/1

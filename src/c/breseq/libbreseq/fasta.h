@@ -108,7 +108,7 @@ namespace breseq {
     
     void insert_sequence_1(int64_t pos_1, const string &insertion_seq, const size_t chr_0=0)
     {
-      // Allow a value of zero, whcih means insert at the start of the sequence
+      // Allow a value of zero, which means insert at the start of the sequence
       if (pos_1 != 0) correct_coordinate_bounds(pos_1, chr_0);
       m_sequence[chr_0].insert(pos_1, insertion_seq);
     }
@@ -161,7 +161,7 @@ namespace breseq {
     ~cFastaFile() {};
       
     bool read_sequence(cFastaSequence &sequence);
-    void write_sequence(const cFastaSequence &sequence);
+    void write_sequence(const cFastaSequence &sequence, const int32_t chr_0=-1);
     void set_current_line(const string& current_line)
     { m_current_line = current_line;}
 

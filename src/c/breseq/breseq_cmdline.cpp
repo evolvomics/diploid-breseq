@@ -459,8 +459,8 @@ int do_convert_reference(int argc, char* argv[]) {
   options.addUsage("");
   options.addUsage("Allowed Options");
   options("help,h", "Display detailed help message", TAKES_NO_ARGUMENT);
-  options("format,f", "Output format. Valid options: FASTA, GFF3, CSV (Default = FASTA)", "FASTA");
-  options("no-sequence,n", "Do not include the nucleotide sequence. The output file will only have features. (Not allowed with FASTA format.)", TAKES_NO_ARGUMENT);
+  options("format,f", "Output format. Valid options: FASTA, GFF3, CSV, MULTIPLOID (Default = FASTA)", "FASTA");
+  options("no-sequence,n", "Do not include the nucleotide sequence. The output file will only have features. (Not allowed with FASTA or MULTIPLOID format.)", TAKES_NO_ARGUMENT);
   options("output,o", "Output reference file path (Default = output.*)");
 
 	options.processCommandArgs(argc, argv);
@@ -480,16 +480,16 @@ int do_convert_reference(int argc, char* argv[]) {
   
   string output_format = to_upper(options["format"]);
   if (output_format=="GFF") output_format="GFF3";
-  if ((output_format != "FASTA") && (output_format != "GFF3") && (output_format != "CSV")) {
+  if ((output_format != "FASTA") && (output_format != "GFF3") && (output_format != "CSV") && (output_format != "MULTIPLOID")) {
     options.addUsage("");
     options.addUsage("Unknown output file format requested: " + to_upper(options["format"]));
     options.printUsage();
     return -1;
   }
   
-  if ( (output_format=="FASTA") && (options.count("no-sequence")) ) {
+  if ( ((output_format=="FASTA") || (output_format=="MULTIPLOID")) && (options.count("no-sequence")) ) {
     options.addUsage("");
-    options.addUsage("The --no-sequence|n option cannot be used with output format FASTA.");
+    options.addUsage("The --no-sequence|n option cannot be used with output formats FASTA or MULTIPLOID.");
     options.printUsage();
     return -1;
   }
@@ -516,6 +516,9 @@ int do_convert_reference(int argc, char* argv[]) {
     refs.WriteGFF(options.count("output") ? options["output"] : "output.gff", options.count("no-sequence"));
   } else if (output_format == "CSV") {
     refs.WriteCSV(options.count("output") ? options["output"] : "output.csv");
+  }else if (output_format == "MULTIPLOID") {
+    string base_name = (options.count("output") ? options["output"] : "output");
+    refs.WriteMultiploid(base_name + ".fasta", base_name + ".vcf", base_name + ".mfasta");
   }
 	
   cerr << "+++   SUCCESSFULLY COMPLETED" << endl;

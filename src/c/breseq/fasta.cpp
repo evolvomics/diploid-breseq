@@ -83,13 +83,21 @@ namespace breseq {
     return true;
   }
 
-  void cFastaFile::write_sequence(const cFastaSequence &sequence) {
+  void cFastaFile::write_sequence(const cFastaSequence &sequence, const int32_t chr_0) {
     
-    (*this) << ">" << sequence.get_name() << endl;
+    // If you request a certain chromosome, we suffix the name with that number
+    int32_t chr_to_print = chr_0;
+    if (chr_to_print == -1) {
+      (*this) << ">" << sequence.get_name() << endl;
+      chr_to_print=0;
+    } else {
+      ASSERT( (chr_0 >= 0) && (static_cast<size_t>(chr_0) < sequence.get_ploidy()), "Requested chromosome number (" + to_string(chr_0+1) + ") that does not exist. Ploidy of sequence is " + to_string(sequence.get_ploidy()));
+      (*this) << ">" << sequence.get_name() << ":" << chr_0 << endl;
+    }
     
     int32_t start_1 = 1;
-    while (start_1 <= (int32_t)sequence.get_sequence_length()) {
-      (*this) << sequence.get_sequence_1(start_1, min<int32_t>(start_1 + m_bases_per_line - 1, sequence.get_sequence_length())) << endl;
+    while (start_1 <= (int32_t)sequence.get_sequence_length(chr_to_print)) {
+      (*this) << sequence.get_sequence_1(start_1, min<int32_t>(start_1 + m_bases_per_line - 1, sequence.get_sequence_length()), chr_to_print) << endl;
       start_1 += m_bases_per_line;
     }
 

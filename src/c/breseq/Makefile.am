@@ -84,9 +84,9 @@ libbreseq_la_LIBADD = $(UNWIND_LIBS) $(top_builddir)/$(HTSLIB)/libhts.la $(top_b
 
 LDADD = libbreseq.la
 
-bin_PROGRAMS = breseq gdtools 
-breseq_SOURCES = breseq_cmdline.cpp
-gdtools_SOURCES = gdtools_cmdline.cpp
+bin_PROGRAMS = diploid-breseq diploid-gdtools 
+diploid_breseq_SOURCES = breseq_cmdline.cpp
+diploid_gdtools_SOURCES = gdtools_cmdline.cpp
 
 EXTRA_DIST = breseq.png \
 	breseq_small.png \

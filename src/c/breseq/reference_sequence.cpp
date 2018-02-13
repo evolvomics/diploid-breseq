@@ -733,12 +733,6 @@ namespace breseq {
     this->VerifySequenceFeatureMatch();
     this->m_initialized = true;
     
-    // Set default ploidy to haploid if it was not previously set
-    for (size_t i=0; i<this->size(); i++) {
-      if ((*this)[i].m_ploidy == 0) {
-        (*this)[i].m_fasta_sequence.set_ploidy(1);
-      }
-    }
     this->standardize_sequences();
     
     // Make certain feature items safe for making into lists separated by semicolons
@@ -1352,18 +1346,20 @@ void cReferenceSequences::ReadVCF(const string& file_name)
     }
   }
   
-  ASSERT(found_header, "Did not find required header line of format\n#CHROM<tab>POS<tab>ID<tab>REF<tab>ALT<tab>QUAL<tab>FILTER<tab>INFO<tab>FORMAT<tab><SAMPLE>");
+  // Must have one named sample column
+  ASSERT(header_items.size()!=9, "Did not find header line of required format, with exactly one <SAMPLE> column\n#CHROM<tab>POS<tab>ID<tab>REF<tab>ALT<tab>QUAL<tab>FILTER<tab>INFO<tab>FORMAT<tab><SAMPLE>");
+  // Ignore extras that are more than one
   CHECK(header_items.size()==10, "Found more than one SAMPLE_ID column. Only the first column (" + header_items[9] + ") will be used.");
   
   while (getline(in, line)) {
     line_number++;
     vector<string> line_items = split(line, "\t");
 
-    ASSERT(line_items.size() != header_items.size(), "Error loading VCF file: " + to_string(file_name) + "\nNumber of columns on line " + to_string(line_number) + ":\n" + join(line_items, "\t") + "\ndoes not match number of columns in header line:\n" + join(header_items, "\t"));
+    ASSERT(line_items.size() == header_items.size(), "Error loading VCF file: " + to_string(file_name) + "\nNumber of columns on line " + to_string(line_number) + ":\n" + join(line_items, "<tab>") + "\ndoes not match number of columns in header line:\n" + join(header_items, "<tab>"));
     
     string& seq_id = line_items[0];
     
-    ASSERT(!m_seq_id_to_index.count(seq_id), "Error loading VCF file: " + to_string(file_name) + "\nNo reference sequence with id [" + seq_id + "] has been loaded. Be sure to load the main sequence file before the corresponding VCF file.");
+    ASSERT(m_seq_id_to_index.count(seq_id), "Error loading VCF file: " + to_string(file_name) + "\nNo reference sequence with id [" + seq_id + "] has been loaded. Be sure to load the main sequence file before the corresponding VCF file.");
       
     size_t seq_index =  m_seq_id_to_index[line_items[0]];
     
@@ -1374,7 +1370,7 @@ void cReferenceSequences::ReadVCF(const string& file_name)
     vector<string> format_items = split(line_items[8], ":");
     vector<string> sample_items = split(line_items[9], ":");
 
-    ASSERT(format_items.size() != sample_items.size(), "Error loading VCF file: " + to_string(file_name) + "\nNumber items in FORMAT column (#9) does not equal number in SAMPLE column (#10) on line " + to_string(line_number) + ":\nFORMAT " + line_items[8] + "\nSAMPLE:" + line_items[9]);
+    ASSERT(format_items.size() == sample_items.size(), "Error loading VCF file: " + to_string(file_name) + "\nNumber items in FORMAT column (#9) does not equal number in SAMPLE column (#10) on line " + to_string(line_number) + ":\nFORMAT " + line_items[8] + "\nSAMPLE:" + line_items[9]);
     
     vector<string> alleles;
     alleles.push_back(line_items[3]);
@@ -1382,34 +1378,37 @@ void cReferenceSequences::ReadVCF(const string& file_name)
     vector<string> alt_alleles = split(line_items[4], ",");
     alleles.insert(alleles.end(), alt_alleles.begin(), alt_alleles.end());
     
+    
+    //// <--- remove section when implemented
     // Need to do some complicated stuff to deal with indels!
     for(size_t c=0; c<alleles.size(); c++) {
       if (alleles[c].size() != 1) {
         ERROR("Error loading VCF file: " + to_string(file_name) + "\nRef or alt allele does not have a length of 1 on line " + to_string(line_number) + ":\n" + join(line_items, "\t") )
       }
     }
-    //// <--- remove when implemented
+    //// <--- end remove when implemented
     
     bool found_genotype(false);
     for (size_t i=0; i<format_items.size(); i++) {
       if (format_items[i]=="GT") {
         found_genotype = true;
-        vector<string> genotype_items = split(line_items[i], "/");
+        vector<string> genotype_items = split(sample_items[i], "/");
         
-        if (seq.get_ploidy() == 0) {
+        if ( (genotype_items.size() != 1) && (seq.get_ploidy() == 1) ) {
           seq.set_ploidy(genotype_items.size());
         }
         
-        for (size_t chr_0=0; chr_0!=alleles.size(); chr_0++) {
-          seq.m_fasta_sequence.replace_sequence_1(position_1, position_1, alleles[chr_0], chr_0);
+        ASSERT(genotype_items.size() == seq.get_ploidy(), "Number of genotype items (" + join(genotype_items, "/") + ") does not match ploidy (" + to_string(seq.get_ploidy()) + ")");
+        
+        for (size_t chr_0=0; chr_0!=genotype_items.size(); chr_0++) {
+          seq.m_fasta_sequence.replace_sequence_1(position_1, position_1, alleles[from_string<size_t>(genotype_items[chr_0])], chr_0);
         }
       }
     }
     
     "Error loading VCF file: " + to_string(file_name) + "\nGenotype (GT) field not found on line " + to_string(line_number) + ":\n" + join(line_items, "\t");
     
-    ASSERT(!found_genotype, "");
-    
+    ASSERT(found_genotype, "");
   }
   
 }
@@ -1450,6 +1449,40 @@ void cReferenceSequences::WriteCSV(const string &file_name) {
         columns[STRAND] = (region.get_strand() == 1) ? "1" : "-1";
 
         out << join(columns, ",") << endl;
+      }
+    }
+  }
+}
+  
+void cReferenceSequences::WriteVCF(const string &file_name)
+{
+  (void) file_name;
+  ofstream output(file_name);
+}
+
+
+// Writes the information sufficient to read back in a multiploid genome and also
+// (optionally) a multiple FASTA file with an entry for each chromosome (multi_fasta_file_name)
+//
+// ---> To read back in the sequence, load main_fasta_file_name and then vcf_file_name
+void cReferenceSequences::WriteMultiploid(
+                                          const string &main_fasta_file_name,
+                                          const string &vcf_file_name,
+                                          const string &multi_fasta_file_name
+                                          )
+{
+  // Main FASTA
+  WriteFASTA(main_fasta_file_name);
+  
+  // VCF file
+  WriteVCF(vcf_file_name);
+
+  // Multiploid FASTA
+  if (multi_fasta_file_name.size() != 0) {
+    cFastaFile ff(multi_fasta_file_name, ios_base::out);
+    for(vector<cAnnotatedSequence>::iterator it_as = this->begin(); it_as < this->end(); it_as++) {
+      for (size_t chr_0=0; chr_0<it_as->m_fasta_sequence.get_ploidy(); chr_0++) {
+        ff.write_sequence(it_as->m_fasta_sequence, chr_0);
       }
     }
   }

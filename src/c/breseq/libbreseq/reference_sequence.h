@@ -603,7 +603,6 @@ namespace breseq {
       string m_description; // GenBank (DEFINITION) | GFF (description), from main feature line
       string m_seq_id;      // GenBank (LOCUS)      | GFF (seqid), from ##sequence-region line
       string m_file_name;   // Name of file this sequence was loaded from
-      size_t m_ploidy;      // Ploidy
     
       cFastaSequence m_fasta_sequence;            //!< Nucleotide sequence
     
@@ -630,8 +629,7 @@ namespace breseq {
         m_length(0),
         m_is_circular(false),
         m_description("na"), 
-        m_seq_id("na"),
-        m_ploidy(0)
+        m_seq_id("na")
         {} ;
     
       void set_features_loaded_from_file(const string& file_name, bool allow_reload = false) {
@@ -659,9 +657,8 @@ namespace breseq {
       // Set up the proper number of sequences for our ploidy
       void set_ploidy(const size_t _ploidy)
       {
-        ASSERT(m_ploidy==0, "Attempt to set ploidy that was already set for sequence " + m_seq_id);
+        ASSERT(get_ploidy()==1, "Attempt to set ploidy that was already set for sequence " + m_seq_id);
         m_fasta_sequence.set_ploidy(_ploidy);
-        m_ploidy = m_fasta_sequence.get_ploidy();
       }
     
       size_t get_ploidy() { return m_fasta_sequence.get_ploidy(); }
@@ -867,6 +864,12 @@ namespace breseq {
     void WriteFASTA(cFastaFile& ff);
     void WriteGFF(const string &file_name, bool no_sequence = false);
     void WriteCSV(const string &file_name);
+    void WriteVCF(const string &file_name);
+    void WriteMultiploid(
+                         const string &main_fasta_file_name,
+                         const string &vcf_file_name,
+                         const string &multi_fasta_file_name
+                         );
     
     //!< Moves over original file names to the current names
     //!< This is key for the relaod of GFF that happens during a breseq
