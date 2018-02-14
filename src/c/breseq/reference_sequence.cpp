@@ -718,8 +718,18 @@ namespace breseq {
   }
   
   // Load a complete collection of files and verify that sufficient information was loaded
-  void cReferenceSequences::LoadFiles(const vector<string>& file_names)
+  void cReferenceSequences::LoadFiles(const vector<string>& file_names, const vector<string>* ploidy)
   {
+    // Pre-flight check on the ploidy
+    vector<uint32_t> ploidy_numbers;
+    if (ploidy) {
+      for(vector<string>::const_iterator it=ploidy->begin(); it!=ploidy->end(); it++) {
+        uint32_t this_ploidy = from_string<uint32_t>(*it);
+        ASSERT( this_ploidy >= 0, "Invalid ploidy value provided: " + to_string(this_ploidy) + " (must be >=0).");
+        ploidy_numbers.push_back(this_ploidy);
+      }
+    }
+    
     list<string> sorted_unique_file_names(file_names.begin(), file_names.end());
 
     sorted_unique_file_names.unique();//Removes non-unique file names
@@ -740,6 +750,35 @@ namespace breseq {
     
     // Finally, update feature lists
     this->update_feature_lists();
+    
+    // Update/check ploidy
+    if (ploidy) {
+      for (size_t i = 0; i < file_names.size(); i++) {
+        const string& file_name = file_names[i];
+        uint32_t this_ploidy = ploidy_numbers[i];
+        
+        for (cReferenceSequences::iterator it=this->begin(); it != this->end(); it++) {
+          
+          cAnnotatedSequence& this_seq = *it;
+
+          if (m_seq_id_to_original_file_name[this_seq.m_seq_id] == file_name) {
+            
+            if (this_ploidy != 0) {
+              if (this_seq.get_ploidy() == 1) {
+                // If the ploidy is one, then set to the new value
+                this_seq.set_ploidy(this_ploidy);
+              } else {
+                // Otherwise it had better already be set to the right value
+                
+                ASSERT( this_seq.get_ploidy() == this_ploidy , "Ploidy assigned from reading reference file (" + to_string(this_seq.get_ploidy()) + ") differs from the value requested (" + to_string(this_ploidy) + ")");
+              }
+            }
+            
+          }
+        }
+      }
+    } // end ploidy block
+    
   }
   
   void cReferenceSequences::PrivateLoadFile(const string& file_name)
@@ -788,6 +827,8 @@ namespace breseq {
     }
     //! Step 2: Load appropriate file
     
+    // Save where we were so we can set ploidy going forward
+    
     switch (file_type) {
       case GENBANK:
       {
@@ -829,6 +870,7 @@ namespace breseq {
       default:
         WARN("Could not load the reference file: " +file_name);
     }
+    
   }
   
   void cReferenceSequences::VerifySequenceFeatureMatch()
@@ -1333,11 +1375,14 @@ void cReferenceSequences::ReadVCF(const string& file_name)
   ifstream in(file_name.c_str());
   ASSERT(!in.fail(), "Could not open VCF file: " + file_name);
   
+  ASSERT(vcf_lines.size() == 0, "Attempt to load more than one VCF file. This is not supported. Please merge into one VCF file for input.");
+  
   string line;
   bool found_header(false);
   vector<string> header_items = split(line, "\t");
   size_t line_number = 0;
   while (getline(in, line)) {
+    vcf_lines.push_back(line);
     line_number++;
     if (line.find("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT") != string::npos) {
       found_header = true;
@@ -1352,6 +1397,7 @@ void cReferenceSequences::ReadVCF(const string& file_name)
   CHECK(header_items.size()==10, "Found more than one SAMPLE_ID column. Only the first column (" + header_items[9] + ") will be used.");
   
   while (getline(in, line)) {
+    vcf_lines.push_back(line);
     line_number++;
     vector<string> line_items = split(line, "\t");
 
@@ -1364,6 +1410,7 @@ void cReferenceSequences::ReadVCF(const string& file_name)
     size_t seq_index =  m_seq_id_to_index[line_items[0]];
     
     cAnnotatedSequence& seq = (*this)[seq_index];
+    
     uint64_t position_1 = from_string<uint64_t>(line_items[1]);
     
     // Find the GT in the format column
@@ -1410,7 +1457,6 @@ void cReferenceSequences::ReadVCF(const string& file_name)
     
     ASSERT(found_genotype, "");
   }
-  
 }
 
 // This only outputs the features. No sequence!
@@ -1456,8 +1502,15 @@ void cReferenceSequences::WriteCSV(const string &file_name) {
   
 void cReferenceSequences::WriteVCF(const string &file_name)
 {
+  // Don't write if there isn't one
+  if (vcf_lines.size()==0) return;
+  
   (void) file_name;
   ofstream output(file_name);
+  
+  for (vector<string>::iterator it=vcf_lines.begin(); it != vcf_lines.end(); it++) {
+    output << *it << endl;
+  }
 }
 
 

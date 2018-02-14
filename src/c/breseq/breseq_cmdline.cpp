@@ -462,6 +462,7 @@ int do_convert_reference(int argc, char* argv[]) {
   options("format,f", "Output format. Valid options: FASTA, GFF3, CSV, MULTIPLOID (Default = FASTA)", "FASTA");
   options("no-sequence,n", "Do not include the nucleotide sequence. The output file will only have features. (Not allowed with FASTA or MULTIPLOID format.)", TAKES_NO_ARGUMENT);
   options("output,o", "Output reference file path (Default = output.*)");
+  options("ploidy,y", "Ploidy of reference sequences. If one value is supplied, then it is used for all reference sequences. If a this option is supplied multiple times (ex: -y 2 -y 1 -y 2), then one entry is expected for each input reference file and all sequences in each file are assigned the respective ploidy value. If a VCF file is provided as a reference the ploidy indicated here must agree with the number of alleles in the VCF file.", NULL, ADVANCED_OPTION);
 
 	options.processCommandArgs(argc, argv);
 	
@@ -494,17 +495,30 @@ int do_convert_reference(int argc, char* argv[]) {
     return -1;
   }
   
-  cerr << "COMMAND: CONVERT-REFERENCE" << endl;
   
-  cerr << "+++   Loading reference files..." << endl;
   vector<string> reference_file_names;
   for (int32_t i = 0; i < options.getArgc(); ++i) {
     cout << "  Input : " << options.getArgv(i) << endl;
     reference_file_names.push_back(options.getArgv(i));
   }
   
+  vector<string> ploidy;
+  if (options.count("ploidy")) {
+    ploidy = from_string<vector<string> >(options["ploidy"]);
+    
+    if ( (ploidy.size() > 1) && (ploidy.size() != reference_file_names.size()) )
+      options.addUsage("");
+    options.addUsage("When multiple ploidy values are provided (-y). The number must match the number of reference sequence files provided.");
+    options.printUsage();
+    exit(-1);
+  }
+  
+  cerr << "COMMAND: CONVERT-REFERENCE" << endl;
+
+  cerr << "+++   Loading reference files..." << endl;
+
   cReferenceSequences refs;
-  refs.LoadFiles(reference_file_names);
+  refs.LoadFiles(reference_file_names, &ploidy);
 
   cerr << "+++   Writing reference file..." << endl;
   
@@ -1210,8 +1224,13 @@ int breseq_default_action(int argc, char* argv[])
     cReferenceSequences conv_ref_seq_info;
     
     // Load all of the reference sequences and convert to FASTA and GFF3
-    conv_ref_seq_info.LoadFiles(settings.all_reference_file_names);
-    conv_ref_seq_info.WriteFASTA(settings.reference_fasta_file_name);
+    conv_ref_seq_info.LoadFiles(settings.all_reference_file_names, &settings.ploidy);
+    conv_ref_seq_info.WriteMultiploid(
+                                      settings.reference_fasta_file_name,
+                                      settings.reference_vcf_file_name,
+                                      settings.reference_mfasta_file_name
+                                      );
+    
     conv_ref_seq_info.WriteGFF(settings.reference_gff3_file_name);
     s.total_reference_sequence_length = conv_ref_seq_info.total_length();
     
@@ -1320,7 +1339,9 @@ int breseq_default_action(int argc, char* argv[])
   // (re)load the reference sequences from our converted files
   // we must be sure to associate them with their original file names
   // so that contig and junction-only references are correctly flagged
-  ref_seq_info.LoadFiles(make_vector<string>(settings.reference_gff3_file_name));
+  vector<string> ref_files_to_reload = make_vector<string>(settings.reference_gff3_file_name);
+  if (file_exists(settings.reference_vcf_file_name.c_str())) ref_files_to_reload.push_back(settings.reference_vcf_file_name);
+  ref_seq_info.LoadFiles(ref_files_to_reload, &settings.ploidy);
   ref_seq_info.use_original_file_names();
   
   // update the normal versus junction-only lists

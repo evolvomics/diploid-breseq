@@ -227,10 +227,11 @@ namespace breseq
     double read_file_max_N_fraction;            // Default = 0.5 COMMAND-LINE OPTION
     
     // Reference sequences
-    vector<string> all_reference_file_names;  // REQUIRED COMMAND-LINE OPTION (filled by below)    
+    vector<string> all_reference_file_names;    // REQUIRED COMMAND-LINE OPTION (filled by below)
     vector<string> normal_reference_file_names; // Default = EMPTY COMMAND-LINE OPTION
     vector<string> contig_reference_file_names; // Default = EMPTY COMMAND-LINE OPTION
     vector<string> junction_only_file_names;    // Default = EMPTY COMMAND-LINE OPTION
+    vector<string> ploidy;                      // Default = EMPTY COMMAND-LINE OPTION
     cReferenceSequenceSettings refseq_settings; // This is extra settings data initialized from
                                                 // refseqs and how they are provided to the CLI
 
@@ -555,7 +556,9 @@ namespace breseq
 		string reference_bam_file_name;
     string reference_fasta_file_name;
 		string reference_faidx_file_name;
-		string reference_gff3_file_name;
+    string reference_gff3_file_name;
+    string reference_vcf_file_name;
+    string reference_mfasta_file_name;
     string unmatched_read_file_name;
     string output_vcf_file_name;
     string output_genome_diff_file_name;

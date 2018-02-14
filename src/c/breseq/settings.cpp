@@ -199,6 +199,8 @@ namespace breseq
     options.addUsage("", ADVANCED_OPTION);
     options.addUsage("Reference File Options", ADVANCED_OPTION);
     options
+    ("ploidy,y", "Ploidy of reference sequences. If one value is supplied, then it is used for all reference sequences. If a this option is supplied multiple times (ex: -y 2 -y 1 -y 2), then one entry is expected for each input reference file and all sequences in each file are assigned the respective ploidy value. If a VCF file is provided as a reference the ploidy indicated here must agree with the number of alleles in the VCF file.", NULL, ADVANCED_OPTION)
+    ("contig-reference,c", "File containing reference sequences in GenBank, GFF3, or FASTA format. The same coverage distribution will be fit to all of the reference sequences in this file simultaneously. This is appropriate when they are all contigs from a genome that should be present with the same copy number. Use of this option will improve performance when there are many contigs and especially when some are very short (≤1,000 bases).", NULL, ADVANCED_OPTION)
     ("contig-reference,c", "File containing reference sequences in GenBank, GFF3, or FASTA format. The same coverage distribution will be fit to all of the reference sequences in this file simultaneously. This is appropriate when they are all contigs from a genome that should be present with the same copy number. Use of this option will improve performance when there are many contigs and especially when some are very short (≤1,000 bases).", NULL, ADVANCED_OPTION)
     ("junction-only-reference,s", "File containing reference sequences in GenBank, GFF3, or FASTA format. These references are only used for calling junctions with other reference sequences. An example of appropriate usage is including a transposon sequence not present in a reference genome. Option may be provided multiple times for multiple files.", NULL, ADVANCED_OPTION)
     ("targeted-sequencing,t", "Reference sequences were targeted for ultra-deep sequencing (using pull-downs or amplicons). Do not fit coverage distribution.", TAKES_NO_ARGUMENT, ADVANCED_OPTION)
@@ -374,7 +376,17 @@ namespace breseq
                                             this->normal_reference_file_names.begin(), 
                                             this->normal_reference_file_names.end() 
                                          ); 
-                                        
+    
+    if (options.count("ploidy")) {
+      this->ploidy = from_string<vector<string> >(options["ploidy"]);
+      
+      if ( (this->ploidy.size() > 1) && (this->ploidy.size() != this->normal_reference_file_names.size()) )
+        options.addUsage("");
+        options.addUsage("When multiple ploidy values are provided (-y). The number must match the number of reference sequence files provided (-r).");
+        options.printUsage();
+        exit(-1);
+    }
+    
     // Important to check for NULL before converting
     if (options.count("contig-reference")) {
       this->contig_reference_file_names = from_string<vector<string> >(options["contig-reference"]);
@@ -986,6 +998,8 @@ namespace breseq
 		this->reference_fasta_file_name = this->data_path + "/reference.fasta";
 		this->reference_faidx_file_name = this->data_path + "/reference.fasta.fai";
 		this->reference_gff3_file_name = this->data_path + "/reference.gff3";
+    this->reference_vcf_file_name = this->data_path + "/reference.vcf";
+    this->reference_mfasta_file_name = this->data_path + "/reference.mfasta";
 		this->unmatched_read_file_name = this->data_path + "/#.unmatched.fastq";
     this->output_vcf_file_name = this->data_path + "/output.vcf";
     this->output_genome_diff_file_name = this->data_path + "/output.gd";

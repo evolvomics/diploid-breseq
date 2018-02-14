@@ -783,6 +783,7 @@ namespace breseq {
     bool m_initialized;
     bool m_use_safe_seq_ids;
     map<string,string> m_seq_id_to_original_file_name;
+    vector<string> vcf_lines; // This is a bit of a cheat, we keep the VCF lines for writing out
 
     //!< Currently supported file types.
     enum FileType {UNKNOWN, GENBANK, FASTA, GFF3, VCF, BULL};
@@ -805,11 +806,11 @@ namespace breseq {
     {}
 
     //!< Load all reference files and verify - this is the only public load method!
-    void LoadFiles(const vector<string>& file_names);
+    void LoadFiles(const vector<string>& file_names, const vector<string>* ploidy=NULL);
     
     //!: Convenience function to load just one file
-    void LoadFile(const string& file_name)
-      { LoadFiles(make_vector<string>(file_name)); }
+    void LoadFile(const string& file_name, const vector<string>* ploidy=NULL)
+      { LoadFiles(make_vector<string>(file_name), ploidy); }
     
     //!< Fixes gene/product names so that our separator character is unique
     void make_features_safe() {
