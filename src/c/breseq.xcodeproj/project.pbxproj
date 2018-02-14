@@ -435,9 +435,9 @@
 /* End PBXLegacyTarget section */
 
 /* Begin PBXNativeTarget section */
-		42B6EDB811C69CC70075F8A3 /* breseq */ = {
+		42B6EDB811C69CC70075F8A3 /* diploid-breseq */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 42B6EDC511C69CC70075F8A3 /* Build configuration list for PBXNativeTarget "breseq" */;
+			buildConfigurationList = 42B6EDC511C69CC70075F8A3 /* Build configuration list for PBXNativeTarget "diploid-breseq" */;
 			buildPhases = (
 				42B6EDBD11C69CC70075F8A3 /* Sources */,
 				42B6EDC011C69CC70075F8A3 /* Frameworks */,
@@ -448,7 +448,7 @@
 			dependencies = (
 				42B6EDBB11C69CC70075F8A3 /* PBXTargetDependency */,
 			);
-			name = breseq;
+			name = "diploid-breseq";
 			productName = error_count;
 			productReference = 708FA5D6132578BE00864C40 /* breseq */;
 			productType = "com.apple.product-type.tool";
@@ -472,9 +472,9 @@
 			productReference = 708FA5DA132578BE00864C40 /* libbreseq.a */;
 			productType = "com.apple.product-type.library.static";
 		};
-		70E92F0E151AB74200F86F2D /* gdtools */ = {
+		70E92F0E151AB74200F86F2D /* diploid-gdtools */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 70E92F18151AB74200F86F2D /* Build configuration list for PBXNativeTarget "gdtools" */;
+			buildConfigurationList = 70E92F18151AB74200F86F2D /* Build configuration list for PBXNativeTarget "diploid-gdtools" */;
 			buildPhases = (
 				70E92F11151AB74200F86F2D /* Sources */,
 				70E92F13151AB74200F86F2D /* Frameworks */,
@@ -485,7 +485,7 @@
 			dependencies = (
 				70E92F0F151AB74200F86F2D /* PBXTargetDependency */,
 			);
-			name = gdtools;
+			name = "diploid-gdtools";
 			productName = error_count;
 			productReference = 70E92F1B151AB74200F86F2D /* gdtools */;
 			productType = "com.apple.product-type.tool";
@@ -523,8 +523,8 @@
 				705977FD1DB99E7C001BBA6B /* htslib */,
 				7056AE0014511F5D00890AB0 /* samtools */,
 				42BA690B1189B7FD000B00B1 /* libbreseq */,
-				42B6EDB811C69CC70075F8A3 /* breseq */,
-				70E92F0E151AB74200F86F2D /* gdtools */,
+				42B6EDB811C69CC70075F8A3 /* diploid-breseq */,
+				70E92F0E151AB74200F86F2D /* diploid-gdtools */,
 			);
 		};
 /* End PBXProject section */
@@ -604,7 +604,7 @@
 		};
 		708FA5D5132578BD00864C40 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 42B6EDB811C69CC70075F8A3 /* breseq */;
+			target = 42B6EDB811C69CC70075F8A3 /* diploid-breseq */;
 			targetProxy = 708FA5D4132578BD00864C40 /* PBXContainerItemProxy */;
 		};
 		70E92F0F151AB74200F86F2D /* PBXTargetDependency */ = {
@@ -1003,7 +1003,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		42B6EDC511C69CC70075F8A3 /* Build configuration list for PBXNativeTarget "breseq" */ = {
+		42B6EDC511C69CC70075F8A3 /* Build configuration list for PBXNativeTarget "diploid-breseq" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				42B6EDC611C69CC70075F8A3 /* Debug */,
@@ -1039,7 +1039,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		70E92F18151AB74200F86F2D /* Build configuration list for PBXNativeTarget "gdtools" */ = {
+		70E92F18151AB74200F86F2D /* Build configuration list for PBXNativeTarget "diploid-gdtools" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				70E92F19151AB74200F86F2D /* Debug */,
