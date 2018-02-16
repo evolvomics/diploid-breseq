@@ -92,7 +92,7 @@ namespace breseq {
       chr_to_print=0;
     } else {
       ASSERT( (chr_0 >= 0) && (static_cast<size_t>(chr_0) < sequence.get_ploidy()), "Requested chromosome number (" + to_string(chr_0+1) + ") that does not exist. Ploidy of sequence is " + to_string(sequence.get_ploidy()));
-      (*this) << ">" << sequence.get_name() << ":" << chr_0 << endl;
+      (*this) << ">" << sequence.get_name() << ":" << (chr_0+1) << endl;
     }
     
     int32_t start_1 = 1;

@@ -3320,7 +3320,6 @@ bool cGenomeDiff::read_counts_for_entry(const cDiffEntry& de, double& new_read_c
       {
         vector<string> new_cov = split(de.get(NEW_COV), "/");
         vector<string> total_cov = split(de.get(TOTAL_COV), "/");
-        split(de.get(NEW_COV), "/");
         new_read_count = from_string<int32_t>(new_cov[0]) + from_string<int32_t>(new_cov[1]);
         total_read_count = from_string<int32_t>(total_cov[0]) + from_string<int32_t>(total_cov[1]);
         break;
@@ -4111,10 +4110,13 @@ void cGenomeDiff::write_vcf(const string &vcffile, cReferenceSequences& ref_seq_
     string AF = formatted_double(freq, 4).to_string();
     info_entries.push_back("AF=" + AF);
     
-    double new_read_count(0.0), total_read_count(0.0);
-    if (read_counts_for_entry(mut, new_read_count, total_read_count)) {
-      info_entries.push_back("AD=" + to_string<double>(new_read_count));
-      info_entries.push_back("DP=" + to_string<double>(total_read_count));
+    // @JEB: Temporary pass-through. Need better multiploid handling
+    if (ref_seq_info[mut[SEQ_ID]].get_ploidy() == 1) {
+      double new_read_count(0.0), total_read_count(0.0);
+      if (read_counts_for_entry(mut, new_read_count, total_read_count)) {
+        info_entries.push_back("AD=" + to_string<double>(new_read_count));
+        info_entries.push_back("DP=" + to_string<double>(total_read_count));
+      }
     }
     
     // Quality

@@ -1440,20 +1440,16 @@ namespace breseq {
     {
       cDiffEntry& item = **ra_it;
       
+      // Avoid doing this for multiploid predictions
+      bool is_multiploid = (item[NEW_BASE].size()>1 || item[REF_BASE].size()>1);
+      
       ///DEBUG
       //cout << item.as_string() << endl;
       
       string ra_seq_id = item[SEQ_ID];
       int32_t ra_position = from_string<int32_t>(item[POSITION]);
-      string ra_ref_base;
-      if (item.entry_exists(INSERT_POSITION) && (from_string<int32_t>(item[INSERT_POSITION]) != 0)) {
-        ra_ref_base = ".";
-      } else {
-        ra_ref_base = ref_seq_info.get_sequence_1(ra_seq_id, ra_position, ra_position);
-      }
-      string ra_new_base = (item[MAJOR_BASE] == ra_ref_base) ? item[MINOR_BASE] : item[MAJOR_BASE];
-      
-      // Frequency is for major allele base... so switch if need be given reference
+      string ra_ref_base = item[REF_BASE];
+      string ra_new_base = item[NEW_BASE];
       double ra_variant_frequency = from_string<double>(item[FREQUENCY]);
       
       // Sometimes a SNP might be called in a deleted area because the end was wrong,

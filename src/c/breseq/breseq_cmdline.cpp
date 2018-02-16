@@ -462,7 +462,7 @@ int do_convert_reference(int argc, char* argv[]) {
   options("format,f", "Output format. Valid options: FASTA, GFF3, CSV, MULTIPLOID (Default = FASTA)", "FASTA");
   options("no-sequence,n", "Do not include the nucleotide sequence. The output file will only have features. (Not allowed with FASTA or MULTIPLOID format.)", TAKES_NO_ARGUMENT);
   options("output,o", "Output reference file path (Default = output.*)");
-  options("ploidy,y", "Ploidy of reference sequences. If one value is supplied, then it is used for all reference sequences. If a this option is supplied multiple times (ex: -y 2 -y 1 -y 2), then one entry is expected for each input reference file and all sequences in each file are assigned the respective ploidy value. If a VCF file is provided as a reference the ploidy indicated here must agree with the number of alleles in the VCF file.", NULL, ADVANCED_OPTION);
+  options("ploidy,y", "Ploidy of reference sequences. If one value is supplied, then it is used for all reference sequences. If this option is supplied multiple times (ex: -y 2 -y 1 -y 2), then each entry applies to one reference file in input order.", NULL);
 
 	options.processCommandArgs(argc, argv);
 	
@@ -506,11 +506,12 @@ int do_convert_reference(int argc, char* argv[]) {
   if (options.count("ploidy")) {
     ploidy = from_string<vector<string> >(options["ploidy"]);
     
-    if ( (ploidy.size() > 1) && (ploidy.size() != reference_file_names.size()) )
+    if ((ploidy.size()>1) && (ploidy.size() != reference_file_names.size())) {
       options.addUsage("");
-    options.addUsage("When multiple ploidy values are provided (-y). The number must match the number of reference sequence files provided.");
-    options.printUsage();
-    exit(-1);
+      options.addUsage("When multiple ploidy values are provided (-y). The number must match the number of reference sequence files provided.");
+      options.printUsage();
+      exit(-1);
+    }
   }
   
   cerr << "COMMAND: CONVERT-REFERENCE" << endl;
@@ -2052,6 +2053,7 @@ int breseq_default_action(int argc, char* argv[])
 			identify_mutations(
         settings,
         summary,
+        ref_seq_info,
 				reference_bam_file_name,
 				reference_fasta_file_name,
 				ra_mc_genome_diff_file_name,

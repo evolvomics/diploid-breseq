@@ -20,6 +20,7 @@ LICENSE AND COPYRIGHT
 #include "libbreseq/pileup.h"
 #include "libbreseq/identify_mutations.h"
 #include "libbreseq/error_count.h"
+#include "libbreseq/reference_sequence.h"
 
 using namespace std;
 
@@ -31,6 +32,7 @@ namespace breseq {
 void identify_mutations(
                 const Settings& settings,
                 const Summary& summary,
+                const cReferenceSequences& ref_seq_info,
 								const string& bam,
 								const string& fasta,
 								const string& gd_file,
@@ -48,6 +50,7 @@ void identify_mutations(
 	identify_mutations_pileup imp(
                 settings,
                 summary,
+                ref_seq_info,
 								bam,
 								fasta,
                 deletion_propagation_cutoff,
@@ -585,31 +588,37 @@ void test_RA_evidence(
       continue;
     }
     
-    // At this point, both consensus and polymorphism quality may be > 0,
-    // we see if either is below the significance + frequency cutoff first.
-
-    if (!ra.entry_exists(REF_BASE)) {
-      ERROR("Expected field 'ref_base' in evidence item\n" + ra.as_string());
-    }
-    if (!ra.entry_exists(CONSENSUS_SCORE)) {
-      ERROR("Expected field 'consensus_score' in evidence item\n" + ra.as_string());
-    }
-    if (!ra.entry_exists(POLYMORPHISM_SCORE)) {
-      ERROR("Expected field 'polymorphism_score' in evidence item\n" + ra.as_string());
-    }
-    if (!ra.entry_exists(POLYMORPHISM_FREQUENCY)) {
-      ERROR("Expected field '" + cString(POLYMORPHISM_FREQUENCY) + "' in evidence item\n" + ra.as_string());
-    }
-    
     bool delete_entry = false;
-    
 
-    if (settings.polymorphism_prediction) {
-      delete_entry = test_RA_evidence_POLYMORPHISM_mode(ra, ref_seq_info, settings);
+    // Haploid case
+    if (ref_seq_info[ref_seq_info.seq_id_to_index(ra[SEQ_ID])].get_ploidy() == 1) {
+
+      // At this point, both consensus and polymorphism quality may be > 0,
+      // we see if either is below the significance + frequency cutoff first.
+
+      if (!ra.entry_exists(REF_BASE)) {
+        ERROR("Expected field 'ref_base' in evidence item\n" + ra.as_string());
+      }
+      if (!ra.entry_exists(CONSENSUS_SCORE)) {
+        ERROR("Expected field 'consensus_score' in evidence item\n" + ra.as_string());
+      }
+      if (!ra.entry_exists(POLYMORPHISM_SCORE)) {
+        ERROR("Expected field 'polymorphism_score' in evidence item\n" + ra.as_string());
+      }
+      if (!ra.entry_exists(POLYMORPHISM_FREQUENCY)) {
+        ERROR("Expected field '" + cString(POLYMORPHISM_FREQUENCY) + "' in evidence item\n" + ra.as_string());
+      }
+      
+      if (settings.polymorphism_prediction) {
+        delete_entry = test_RA_evidence_POLYMORPHISM_mode(ra, ref_seq_info, settings);
+      } else {
+        delete_entry = test_RA_evidence_CONSENSUS_mode(ra, ref_seq_info, settings);
+      }
+      
     } else {
-      delete_entry = test_RA_evidence_CONSENSUS_mode(ra, ref_seq_info, settings);
+      // Multiploid case
     }
-  
+
     // User evidence items should be treated normally (to define polymorphism vs. consensus predictions)
     // but they should not be rejected, and they should not be deleted.
     if (ra.entry_exists("user_defined")) {
@@ -634,6 +643,7 @@ void test_RA_evidence(
 identify_mutations_pileup::identify_mutations_pileup(
                               const Settings& settings,
                               const Summary& summary,
+                              const cReferenceSequences& ref_seq_info,
 															const string& bam,
 															const string& fasta,
                               const vector<double>& deletion_propagation_cutoffs,
@@ -647,6 +657,7 @@ identify_mutations_pileup::identify_mutations_pileup(
                                                             )
 : pileup_base(bam, fasta)
 , _settings(settings)
+, _ref_seq_info(ref_seq_info)
 , _gd()
 , _deletion_seed_cutoffs(deletion_seed_cutoffs)
 , _deletion_propagation_cutoffs(deletion_propagation_cutoffs)
@@ -656,7 +667,6 @@ identify_mutations_pileup::identify_mutations_pileup(
 , _polymorphism_precision_decimal(polymorphism_precision_decimal)
 , _polymorphism_precision_places(polymorphism_precision_places)
 , _log10_ref_length(0)
-, _snp_caller("haploid", summary.sequence_conversion.total_reference_sequence_length)
 , _this_deletion_reaches_seed_value(false)
 , _this_deletion_redundant_reached_zero(false)
 , _last_position_coverage_printed(0)
@@ -664,7 +674,7 @@ identify_mutations_pileup::identify_mutations_pileup(
 {
 	
   // remove once used
-  (void)settings;
+  (void)summary;
   
   set_print_progress(true);
   
@@ -880,10 +890,12 @@ void identify_mutations_pileup::pileup_callback(const pileup& p) {
     cSNPCall snp_call = _snp_caller.get_prediction();
     
     base_char best_base_char('N');
+    
     double consensus_bonferroni_score(numeric_limits<double>::quiet_NaN());
     double polymorphism_bonferroni_score(numeric_limits<double>::quiet_NaN());
 
     // SNP caller returns one genotype
+
     best_base_char = snp_call.genotype[0];
     // Here is where we convert to a Bonferroni type correction for phred score from SNP caller
     consensus_bonferroni_score = snp_call.score - (_log10_ref_length);
@@ -894,7 +906,7 @@ void identify_mutations_pileup::pileup_callback(const pileup& p) {
       base_predicted = true;
     }
     
-    //cout << position << " " << best_base_char << " " << e_value_call << " " << (base_predicted ? "T" : "F") << endl;
+    //cout << position << " " << best_genotype << " " << e_value_call << " " << (base_predicted ? "T" : "F") << endl;
     
 		int total_cov[3]={0,0,0}; // triple, same as above
     
@@ -951,78 +963,101 @@ void identify_mutations_pileup::pileup_callback(const pileup& p) {
 		
 		//###
 		//## POLYMORPHISM POLYMORPHISM POLYMORPHISM
-		//###								
-
-		bool passed_as_polymorphism_prediction(false);
-    polymorphism_prediction ppred;
-    base_char second_best_base_char('N');
+		//###
 
     cDiffEntry mut(RA);
     
     //## evaluate whether to call an actual mutation!
     // -- note that we accept > 0 and only reject later
     // so that these can potentially make it into the marginal data
-    bool passed_as_consensus_prediction = (best_base_char != ref_base_char) && (!std::isnan(consensus_bonferroni_score) && (consensus_bonferroni_score > 0));
+    bool passed_as_consensus_prediction;
     
-    // Find the bases with the highest and second highest coverage
-    // We only predict polymorphisms involving these 'major' and 'minor' alleles
-    base_index best_base_index(base_list_N_index);
-    int best_base_coverage(0);
-    base_index second_best_base_index(base_list_N_index);
-    int second_best_base_coverage(0);
+    // Only used in multiploid case
+    string best_genotype;
+    string ref_genotype;
+    
+    if (_snp_caller._ploidy == 1) {
+      passed_as_consensus_prediction= (best_base_char != ref_base_char) && (!std::isnan(consensus_bonferroni_score) && (consensus_bonferroni_score > 0));
+    } else {
+      best_genotype = snp_call.genotype;
+      ref_genotype = _ref_seq_info[p.target()].get_genotype_1(position, insert_count);
+      
+      passed_as_consensus_prediction = (best_genotype != ref_genotype) && (!std::isnan(consensus_bonferroni_score) && (consensus_bonferroni_score > 0));
+    }
+    
+    
+    /// ------>
+    /// BEGIN CODE for testing mixed bases and polymorphisms
+    /// MUST be skipped for non-haploid genomes
+    
+    bool passed_as_polymorphism_prediction(false);
+    polymorphism_prediction ppred;
+    base_char second_best_base_char('N');
+    
+    if (_snp_caller._ploidy == 1) {
+      // Find the bases with the highest and second highest coverage
+      // We only predict polymorphisms involving these 'major' and 'minor' alleles
+      base_index best_base_index(base_list_N_index);
+      int best_base_coverage(0);
+      base_index second_best_base_index(base_list_N_index);
+      int second_best_base_coverage(0);
 
-    vector<double> snp_probs = _snp_caller.get_genotype_log10_probabilities();
-            
-    for (uint8_t i=0; i<base_list_size; i++) {
-      base_char this_base_char = base_char_list[i];
-      base_index this_base_index = i;
-      int this_base_coverage = pos_info[this_base_char][0] + pos_info[this_base_char][2];
+      vector<double> snp_probs = _snp_caller.get_genotype_log10_probabilities();
       
-      if (this_base_coverage==0) continue;
-      
-      // if better coverage or tied in coverage and better probability
-      if ((this_base_coverage > best_base_coverage) ||
-        ((this_base_coverage == best_base_coverage) && ((best_base_index==base_list_N_index) || (snp_probs[this_base_index] > snp_probs[best_base_index])))) {
-        second_best_base_index = best_base_index;
-        second_best_base_coverage = best_base_coverage;
-        best_base_index = this_base_index;
-        best_base_coverage = this_base_coverage;
+      for (uint8_t i=0; i<base_list_size; i++) {
+        base_char this_base_char = base_char_list[i];
+        base_index this_base_index = i;
+        int this_base_coverage = pos_info[this_base_char][0] + pos_info[this_base_char][2];
+        
+        if (this_base_coverage==0) continue;
+        
+        // if better coverage or tied in coverage and better probability
+        if ((this_base_coverage > best_base_coverage) ||
+          ((this_base_coverage == best_base_coverage) && ((best_base_index==base_list_N_index) || (snp_probs[this_base_index] > snp_probs[best_base_index])))) {
+          second_best_base_index = best_base_index;
+          second_best_base_coverage = best_base_coverage;
+          best_base_index = this_base_index;
+          best_base_coverage = this_base_coverage;
+        }
+        else if ((this_base_coverage > second_best_base_coverage)
+          || ((this_base_coverage == second_best_base_coverage) && (((second_best_base_index==base_list_N_index) ||snp_probs[this_base_index] > snp_probs[second_best_base_index])))) {
+          second_best_base_index = this_base_index;
+          second_best_base_coverage = this_base_coverage;
+        }
       }
-      else if ((this_base_coverage > second_best_base_coverage) 
-        || ((this_base_coverage == second_best_base_coverage) && (((second_best_base_index==base_list_N_index) ||snp_probs[this_base_index] > snp_probs[second_best_base_index])))) {
-        second_best_base_index = this_base_index;
-        second_best_base_coverage = this_base_coverage;
+      
+      int this_base_coverage = min(pos_info[best_base_char][0], pos_info[best_base_char][2]);
+      
+      // Only try mixed SNP model if there is coverage for more than one base!
+      ppred.frequency = 1;
+      if (second_best_base_index != base_list_N_index) {
+        best_base_char = base_char_list[best_base_index];
+        second_best_base_char = base_char_list[second_best_base_index];
+
+        // tries all frequencies of the best two
+        if (_settings.polymorphism_prediction) {
+          ppred = predict_polymorphism(best_base_char, second_best_base_char, pdata);
+        }
+        
+        // tries only the raw ML frequency of the best two
+        else /* if (_settings.mixed_base_prediction) */ {
+          ppred = predict_mixed_base(best_base_char, second_best_base_char, pdata);
+        }
+        
+        // Calculate E-value for polymorphism score (E theta)
+        polymorphism_bonferroni_score = (-(log(ppred.likelihood_ratio_test_p_value)/log(10)) - _log10_ref_length);
+        
+        // Do we accept this as a polymorphism?
+        if (polymorphism_bonferroni_score >= _polymorphism_score_cutoff)
+          passed_as_polymorphism_prediction = true;
+        
+        //cerr << ppred.frequency << " " << ppred.log10_base_likelihood << " " << ppred.p_value << endl;
       }
     }
     
-    int this_base_coverage = min(pos_info[best_base_char][0], pos_info[best_base_char][2]);
+    /// <------
+    /// END CODE for testing mixed bases and polymorphisms
     
-    // Only try mixed SNP model if there is coverage for more than one base!
-    ppred.frequency = 1;
-    if (second_best_base_index != base_list_N_index) {
-      best_base_char = base_char_list[best_base_index];
-      second_best_base_char = base_char_list[second_best_base_index];
-
-      // tries all frequencies of the best two
-      if (_settings.polymorphism_prediction) {
-        ppred = predict_polymorphism(best_base_char, second_best_base_char, pdata);
-      }
-      
-      // tries only the raw ML frequency of the best two
-      else /* if (_settings.mixed_base_prediction) */ {
-        ppred = predict_mixed_base(best_base_char, second_best_base_char, pdata);
-      }
-      
-      // Calculate E-value for polymorphism score (E theta)
-      polymorphism_bonferroni_score = (-(log(ppred.likelihood_ratio_test_p_value)/log(10)) - _log10_ref_length);
-      
-      // Do we accept this as a polymorphism?
-      if (polymorphism_bonferroni_score >= _polymorphism_score_cutoff)
-        passed_as_polymorphism_prediction = true;
-      
-      //cerr << ppred.frequency << " " << ppred.log10_base_likelihood << " " << ppred.p_value << endl;
-    }
-		
 		//###
 		//## UNKNOWN UNKNOWN UNKNOWN
 		//###
@@ -1052,51 +1087,62 @@ void identify_mutations_pileup::pileup_callback(const pileup& p) {
       
       //## Specific initializations for polymorphisms. Must take precedence.
 
-      //# the frequency returned is the probability of the FIRST base
-      //# we want to quote the probability of the second base (the minor allele from the reference).
-      mut[REF_BASE] = ref_base_char;
-      mut[NEW_BASE] = (best_base_char == ref_base_char) ? second_best_base_char : best_base_char;
+      if (_snp_caller._ploidy == 1) {
       
-      mut[MAJOR_BASE] = best_base_char;
-      mut[MINOR_BASE] = second_best_base_char;
-      mut[MAJOR_FREQUENCY] = formatted_double(ppred.frequency, _polymorphism_precision_places, true).to_string();
-      
-      double variant_frequency = ppred.frequency;
-      if (mut[REF_BASE] == mut[MAJOR_BASE]) {
-        variant_frequency = 1.0 - variant_frequency;
-      }
-      mut[POLYMORPHISM_FREQUENCY] = formatted_double(variant_frequency, _polymorphism_precision_places, true).to_string();
+        //# the frequency returned is the probability of the FIRST base
+        //# we want to quote the probability of the second base (the minor allele from the reference).
+        mut[REF_BASE] = ref_base_char;
+        mut[NEW_BASE] = (best_base_char == ref_base_char) ? second_best_base_char : best_base_char;
+        
+        mut[MAJOR_BASE] = best_base_char;
+        mut[MINOR_BASE] = second_best_base_char;
+        mut[MAJOR_FREQUENCY] = formatted_double(ppred.frequency, _polymorphism_precision_places, true).to_string();
+        
+        double variant_frequency = ppred.frequency;
+        if (mut[REF_BASE] == mut[MAJOR_BASE]) {
+          variant_frequency = 1.0 - variant_frequency;
+        }
+        mut[POLYMORPHISM_FREQUENCY] = formatted_double(variant_frequency, _polymorphism_precision_places, true).to_string();
 
-      
-      // Add line to R input file if we are only a polymorphism
-      
-      // @JEB TO_DO: deprecate going to R here
-      // and in the main PIPELINE. We can now do
-      // Fisher's exact test in C++ and the KS
-      // test is probably not necessary
-      
-      if (ppred.frequency != 1) {
-        mut[POLYMORPHISM_EXISTS] = "1";
-        write_polymorphism_input_file_line(p, insert_count, ref_base_char, best_base_char, second_best_base_char, ppred, pos_info, pdata );
-      }
+        
+        // Add line to R input file if we are only a polymorphism
+        
+        // @JEB TO_DO: deprecate going to R here
+        // and in the main PIPELINE. We can now do
+        // Fisher's exact test in C++ and the KS
+        // test is probably not necessary
+        
+        if (ppred.frequency != 1) {
+          mut[POLYMORPHISM_EXISTS] = "1";
+          write_polymorphism_input_file_line(p, insert_count, ref_base_char, best_base_char, second_best_base_char, ppred, pos_info, pdata );
+        }
 
-      //## More fields common to consensus mutations and polymorphisms
-      //## ...now that ref_base and new_base are defined
-      
-      vector<uint32_t>& ref_cov = pos_info[from_string<base_char>(mut[REF_BASE])];
-      mut[REF_COV] = to_string(make_pair(static_cast<int32_t>(ref_cov[2]), static_cast<int32_t>(ref_cov[0])));
-      
-      vector<uint32_t>& new_cov = pos_info[from_string<base_char>(mut[NEW_BASE])];
-      mut[NEW_COV] = to_string(make_pair(static_cast<int32_t>(new_cov[2]), static_cast<int32_t>(new_cov[0])));
-      
-      vector<uint32_t>& major_cov = pos_info[from_string<base_char>(mut[MAJOR_BASE])];
-      mut[MAJOR_COV] = to_string(make_pair(static_cast<int32_t>(major_cov[2]), static_cast<int32_t>(major_cov[0])));
-      
-      vector<uint32_t>& minor_cov = pos_info[from_string<base_char>(mut[MINOR_BASE])];
-      mut[MINOR_COV] = to_string(make_pair(static_cast<int32_t>(minor_cov[2]), static_cast<int32_t>(minor_cov[0])));
-      
-      mut[TOTAL_COV] = to_string(make_pair(total_cov[2], total_cov[0]));
-      
+        //## More fields common to consensus mutations and polymorphisms
+        //## ...now that ref_base and new_base are defined
+        
+        vector<uint32_t>& ref_cov = pos_info[from_string<base_char>(mut[REF_BASE])];
+        mut[REF_COV] = to_string(make_pair(static_cast<int32_t>(ref_cov[2]), static_cast<int32_t>(ref_cov[0])));
+        
+        vector<uint32_t>& new_cov = pos_info[from_string<base_char>(mut[NEW_BASE])];
+        mut[NEW_COV] = to_string(make_pair(static_cast<int32_t>(new_cov[2]), static_cast<int32_t>(new_cov[0])));
+        
+        vector<uint32_t>& major_cov = pos_info[from_string<base_char>(mut[MAJOR_BASE])];
+        mut[MAJOR_COV] = to_string(make_pair(static_cast<int32_t>(major_cov[2]), static_cast<int32_t>(major_cov[0])));
+        
+        vector<uint32_t>& minor_cov = pos_info[from_string<base_char>(mut[MINOR_BASE])];
+        mut[MINOR_COV] = to_string(make_pair(static_cast<int32_t>(minor_cov[2]), static_cast<int32_t>(minor_cov[0])));
+        
+        mut[TOTAL_COV] = to_string(make_pair(total_cov[2], total_cov[0]));
+      } else {
+        
+        // Multiploid genome case!!
+        mut[REF_BASE] = ref_genotype;
+        mut[NEW_BASE] = best_genotype;
+        mut[MAJOR_BASE] = ref_genotype;
+        mut[MINOR_BASE] = best_genotype;
+        mut[FREQUENCY] = "1";
+        mut[TOTAL_COV] = to_string(make_pair(total_cov[2], total_cov[0]));
+      }
       _gd.add(mut);
       
       //cout << "Added:" << _gd.evidence_list().back()->as_string() << endl;
@@ -1217,7 +1263,10 @@ void identify_mutations_pileup::pileup_callback(const pileup& p) {
 
 void identify_mutations_pileup::at_target_start(const uint32_t tid)
 {
-    
+  // Create the SNP Caller for this reference with proper ploidy
+  _snp_caller.initialize(_ref_seq_info[tid].get_ploidy());
+  
+  
   // Open per-reference coverage file:
 	if(_print_coverage_data) {
 		string filename = _settings.file_name(_settings.complete_coverage_text_file_name, "@", target_name(tid));
@@ -1802,24 +1851,34 @@ double identify_mutations_pileup::calculate_two_base_model_log10_likelihood(
   */
 	return log10_likelihood;
 }
-
-cDiscreteSNPCaller::cDiscreteSNPCaller(
-                                       const string& type,
-                                       uint32_t reference_length
-                                       ) 
-: _type(type)
-{
   
-
+  
+void cDiscreteSNPCaller::initialize(const uint32_t ploidy)
+{
+  _ploidy = ploidy;
+  
   // Uniform priors across all bases.
-  if (_type == "haploid") {
-    
-    double uniform_probability = 1.0 / static_cast<double>(base_list_size);
-    add_genotype("A", uniform_probability);
-    add_genotype("C", uniform_probability);
-    add_genotype("G", uniform_probability);
-    add_genotype("T", uniform_probability);
-    add_genotype(".", uniform_probability);
+  
+  vector<string> last_genotype_list = make_vector<string>("");
+  vector<string> current_genotype_list;
+  for(uint32_t p=0; p<ploidy; p++) {
+    for(size_t i=0; i<last_genotype_list.size(); i++) {
+      for(size_t j=0; j<base_list_size; j++) {
+        if (last_genotype_list[i].size()) {
+          if (last_genotype_list[i][last_genotype_list[i].size()-1] > base_char_list[j])
+            continue;
+        }
+        
+        current_genotype_list.push_back(last_genotype_list[i] + base_char_list[j]);
+      }
+    }
+    last_genotype_list = current_genotype_list;
+    current_genotype_list.clear();
+  }
+  
+  double uniform_probability = 1.0 / static_cast<double>(last_genotype_list.size());
+  for(size_t i=0; i<last_genotype_list.size(); i++) {
+    add_genotype(last_genotype_list[i], uniform_probability);
   }
   
   /*
@@ -1836,38 +1895,6 @@ cDiscreteSNPCaller::cDiscreteSNPCaller(
   }
   */
   
-  // Extra states and priors for unexpected mixed states... experimental
-  else if (_type == "haploid-cnv") {
-    
-    double mixed_probability = 1.0 / reference_length;    
-    double uniform_probability = (1.0 - 10 * mixed_probability) / base_list_size;    
-    
-    add_genotype("A", uniform_probability);
-    add_genotype("C", uniform_probability);
-    add_genotype("G", uniform_probability);
-    add_genotype("T", uniform_probability);
-    add_genotype(".", uniform_probability);
-    
-    add_genotype("AC", mixed_probability);
-    add_genotype("AG", mixed_probability);
-    add_genotype("AT", mixed_probability);
-    add_genotype("A.", mixed_probability);
-    
-    add_genotype("CG", mixed_probability);
-    add_genotype("CT", mixed_probability);
-    add_genotype("C.", mixed_probability);
-    
-    add_genotype("GT", mixed_probability);
-    add_genotype("G.", mixed_probability);
-    
-    add_genotype("T.", mixed_probability);
-  }  
-  
-  else
-  {
-    ERROR("Unknown SNP Caller type:" + type);
-  }
-  
   // Check priors
   double total_probability = 0;
   for(size_t i=0; i<_log10_genotype_prior_probabilities.size(); i++) {
@@ -1875,7 +1902,6 @@ cDiscreteSNPCaller::cDiscreteSNPCaller(
   }
   ostringstream ss;
   ss << setprecision(5) << total_probability;
-  
   ASSERT( from_string<double>(ss.str()) == 1.0, "Prior probabilities do not sum to 1. (" + to_string(total_probability) + ").")
   
   reset(0);

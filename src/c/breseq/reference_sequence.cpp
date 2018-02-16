@@ -110,6 +110,34 @@ namespace breseq {
     //ERROR("Cannot find index of position that is not within gene.");
   }
   
+  
+  // @JEB Needs extension to deal with insert positions correctly
+  string cAnnotatedSequence::get_genotype_1(const int32_t pos_1, const int32_t insert_pos) const
+  {
+    string genotype;
+    list<string> base_list;
+    list<string> insert_list;
+    
+    for(size_t p=0; p<get_ploidy(); p++) {
+      char this_base = (insert_pos==0) ? get_char_1(pos_1, p) : '.';
+      if (this_base=='.') {
+        insert_list.push_back(string(1, this_base));
+      } else {
+        base_list.push_back(string(1, this_base));
+      }
+    }
+    base_list.sort();
+    for(list<string>::iterator it=base_list.begin(); it!=base_list.end(); it++) {
+      genotype += *it;
+    }
+    for(list<string>::iterator it=insert_list.begin(); it!=insert_list.end(); it++) {
+      genotype += *it;
+    }
+    
+    return genotype;
+  }
+
+  
   string cAnnotatedSequence::get_stranded_sequence_1(int32_t strand, int32_t start_1, int32_t end_1) const
   {
     ASSERT( (strand==-1) || (strand ==+1), "Expected strand +/-1. Provided: " + to_string(strand));
@@ -720,19 +748,40 @@ namespace breseq {
   // Load a complete collection of files and verify that sufficient information was loaded
   void cReferenceSequences::LoadFiles(const vector<string>& file_names, const vector<string>* ploidy)
   {
+    list<string> sorted_unique_file_names(file_names.begin(), file_names.end());
+    
+    // **PLOIDY**
     // Pre-flight check on the ploidy
-    vector<uint32_t> ploidy_numbers;
-    if (ploidy) {
+    map<string, uint32_t> file_name_to_ploidy;
+
+    if (ploidy && ploidy->size()) {
+      vector<uint32_t> ploidy_numbers;
+      
       for(vector<string>::const_iterator it=ploidy->begin(); it!=ploidy->end(); it++) {
         uint32_t this_ploidy = from_string<uint32_t>(*it);
         ASSERT( this_ploidy >= 0, "Invalid ploidy value provided: " + to_string(this_ploidy) + " (must be >=0).");
         ploidy_numbers.push_back(this_ploidy);
       }
+      
+      // Set up a map to look for ploidy
+      // If one value is provided, we use it for ALL files.
+      // If multiple ones are provided, the number of ploidies must match the number of files.
+      if (ploidy->size() == 1) {
+        for (size_t i = 0; i < file_names.size(); i++) {
+          file_name_to_ploidy[file_names[i]] = ploidy_numbers[i];
+        }
+      } else {
+        ASSERT(ploidy->size() == file_names.size(), "Number of ploidy values provided does not match the number of reference sequence files.");
+        for (size_t i = 0; i < file_names.size(); i++) {
+          file_name_to_ploidy[file_names[i]] = ploidy_numbers[i];
+        }
+      }
     }
+    // **PLOIDY**
     
-    list<string> sorted_unique_file_names(file_names.begin(), file_names.end());
-
-    sorted_unique_file_names.unique();//Removes non-unique file names
+    //Removes non-unique file names. Must be done after assigning ploidies to original file names
+    sorted_unique_file_names.unique();
+    
     m_seq_id_to_original_file_name.clear(); // Clear old file names
     
     for(list<string>::const_iterator it = sorted_unique_file_names.begin(); it != sorted_unique_file_names.end(); it++)
@@ -751,34 +800,31 @@ namespace breseq {
     // Finally, update feature lists
     this->update_feature_lists();
     
+    // **PLOIDY**
     // Update/check ploidy
-    if (ploidy) {
-      for (size_t i = 0; i < file_names.size(); i++) {
-        const string& file_name = file_names[i];
-        uint32_t this_ploidy = ploidy_numbers[i];
-        
-        for (cReferenceSequences::iterator it=this->begin(); it != this->end(); it++) {
-          
-          cAnnotatedSequence& this_seq = *it;
+    if (ploidy && ploidy->size()) {
 
-          if (m_seq_id_to_original_file_name[this_seq.m_seq_id] == file_name) {
-            
-            if (this_ploidy != 0) {
-              if (this_seq.get_ploidy() == 1) {
-                // If the ploidy is one, then set to the new value
-                this_seq.set_ploidy(this_ploidy);
-              } else {
-                // Otherwise it had better already be set to the right value
-                
-                ASSERT( this_seq.get_ploidy() == this_ploidy , "Ploidy assigned from reading reference file (" + to_string(this_seq.get_ploidy()) + ") differs from the value requested (" + to_string(this_ploidy) + ")");
-              }
-            }
-            
-          }
-        }
+      map<string,string> seq_id_to_file_name;
+      for (cReferenceSequences::iterator it=begin(); it != end(); it++) {
+        seq_id_to_file_name[it->m_seq_id] = it->m_file_name;
       }
-    } // end ploidy block
-    
+      
+      // Match the ploidies up to the sequences loaded in each file
+      for (map<string,string>::iterator it=seq_id_to_file_name.begin(); it != seq_id_to_file_name.end(); it++) {
+        cAnnotatedSequence& this_seq = (*this)[m_seq_id_to_index[it->first]];
+        uint32_t this_ploidy=file_name_to_ploidy[it->second];
+        if (this_ploidy != 0) {
+          if (this_seq.get_ploidy() == 1) {
+            // If the ploidy was one, then set to the new value
+            this_seq.set_ploidy(this_ploidy);
+          } else {
+            // Otherwise it had better already be set to the right value
+            ASSERT( this_seq.get_ploidy() == this_ploidy , "Ploidy assigned from reading reference file (" + to_string(this_seq.get_ploidy()) + ") differs from the value requested (" + to_string(this_ploidy) + ")");
+          }
+        } // for reference sequence
+      } // for file_name
+    }
+  // **PLOIDY**
   }
   
   void cReferenceSequences::PrivateLoadFile(const string& file_name)

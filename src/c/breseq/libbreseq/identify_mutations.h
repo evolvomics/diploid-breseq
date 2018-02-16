@@ -29,6 +29,8 @@ using namespace std;
 
 namespace breseq {
 
+  class cReferenceSequences;
+  
   static uint8_t kMutationScorePrecision = 1;
   
 	/*! Calculate errors in the given BAM file based on reference FAI files.
@@ -42,6 +44,7 @@ namespace breseq {
 	void identify_mutations(
                           const Settings& settings,
                           const Summary& summary,
+                          const cReferenceSequences& ref_seq_info,
                           const string& bam,
 													const string& fasta,
 													const string& gd_file,
@@ -62,6 +65,7 @@ namespace breseq {
                           const Settings& settings
                           );
   
+
   /*! Position base information struct.
 	 
    Used for recording observations of bases on different strands.
@@ -178,13 +182,12 @@ namespace breseq {
   
   class cDiscreteSNPCaller {
   public:
-    cDiscreteSNPCaller(
-                       const string& type, 
-                       uint32_t reference_length
-                       );
+    uint32_t _ploidy;
     
+    cDiscreteSNPCaller() {};
     virtual ~cDiscreteSNPCaller() {};
 
+    void initialize(const uint32_t ploidy);
     void add_genotype(const string& genotype, double probability);
     void reset(uint8_t ref_base_index);
     void update(
@@ -200,9 +203,9 @@ namespace breseq {
     vector<double> get_genotype_log10_probabilities() { return _log10_genotype_probabilities; }
     
   protected:
+    
     uint32_t _observations;                        // number of read bases recorded
     double _normalized_observations;               // observations, taking into account mapping quality probability
-    string _type;
     vector<double> _log10_genotype_prior_probabilities;
     vector<double> _log10_genotype_probabilities;
     vector<vector<base_index> > _genotype_vector;  // holds all possible genotypes as lists of bases
@@ -243,6 +246,7 @@ namespace breseq {
 		identify_mutations_pileup(
                               const Settings& settings,
                               const Summary& summary,
+                              const cReferenceSequences& ref_seq_info,
                               const string& bam,
 															const string& fasta,
                               const vector<double>& deletion_propagation_cutoff,
@@ -300,6 +304,7 @@ namespace breseq {
 		
     //! Settings passed at command line
     const Settings& _settings;
+    const cReferenceSequences& _ref_seq_info;
 		cGenomeDiff _gd; //!< Genome diff.
     diff_entry_list_t _user_evidence_ra_list; //!< List of entries containing user-entered RA items.
     vector<double> _deletion_seed_cutoffs; //!< Coverage below which deletions are cutoff.

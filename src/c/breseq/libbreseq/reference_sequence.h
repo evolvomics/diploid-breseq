@@ -661,7 +661,7 @@ namespace breseq {
         m_fasta_sequence.set_ploidy(_ploidy);
       }
     
-      size_t get_ploidy() { return m_fasta_sequence.get_ploidy(); }
+      size_t get_ploidy() const { return m_fasta_sequence.get_ploidy(); }
     
       // Utility to get top strand sequence
       string get_sequence_1(int32_t start_1, int32_t end_1, const size_t chr_0=0) const
@@ -673,6 +673,8 @@ namespace breseq {
       {
         return m_fasta_sequence.get_char_1(pos_1, chr_0);
       }
+    
+      string get_genotype_1(const int32_t pos_1, const int32_t insert_pos) const;
     
       string get_stranded_sequence_1(int32_t strand, int32_t start_1, int32_t end_1) const;
       char get_stranded_sequence_1(int32_t strand, int32_t pos_1) const;
@@ -972,6 +974,16 @@ namespace breseq {
     string get_circular_sequence_1(uint32_t tid, const size_t start_1, const size_t size) const
     {
       return (*this)[tid].get_circular_sequence_1(start_1, size);
+    }
+    
+    size_t get_ploidy(const string& seq_id) const
+    {
+      return (*this)[seq_id].get_ploidy();
+    }
+    
+    string get_genotype_1(const string& seq_id, const int32_t pos_1, const int32_t insert_pos=0) const
+    {
+      return (*this)[seq_id].get_genotype_1(pos_1, insert_pos);
     }
 
     void replace_sequence_1(const string& seq_id, int32_t start_1, int32_t end_1, const string& replacement_seq, string mut_type="", bool verbose=false)
