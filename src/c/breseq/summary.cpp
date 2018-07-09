@@ -406,7 +406,7 @@ PublicReferencesSummary::PublicReferencesSummary(
                                                  const cReferenceSequenceSettings &rss
                                                  )
 {
-  total_length = r.total_length();
+  total_length = r.get_total_length();
   total_features = 0;
   total_genes = 0;
   total_repeats = 0;
@@ -456,6 +456,7 @@ PublicOptionsSummary::PublicOptionsSummary(const Settings &t)
   bowtie2_junction = t.bowtie2_junction;
   bowtie2_junction_maximum_alignments_to_consider_per_read = t.bowtie2_junction_maximum_alignments_to_consider_per_read;
   bowtie2_genome_maximum_alignments_to_consider_per_read = t.bowtie2_genome_maximum_alignments_to_consider_per_read;
+  minimum_mapping_quality = t.minimum_mapping_quality;
   require_match_length = t.require_match_length;
   require_match_fraction = t.require_match_fraction;
   maximum_read_mismatches = t.maximum_read_mismatches;
@@ -752,6 +753,7 @@ void to_json(json& j, const PublicOptionsSummary& s)
       {"bowtie2_junction", s.bowtie2_junction},
       {"bowtie2_junction_maximum_alignments_to_consider_per_read", s.bowtie2_junction_maximum_alignments_to_consider_per_read},
       {"bowtie2_genome_maximum_alignments_to_consider_per_read", s.bowtie2_genome_maximum_alignments_to_consider_per_read},
+      {"minimum_mapping_quality", s.minimum_mapping_quality},
       {"require_match_length", s.require_match_length},
       {"require_match_fraction", s.require_match_fraction},
       {"maximum_read_mismatches", s.maximum_read_mismatches},

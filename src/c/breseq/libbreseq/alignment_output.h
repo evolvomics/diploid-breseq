@@ -157,7 +157,8 @@ namespace breseq
       Alignment_Output_Pileup ( 
                                const string& bam, 
                                const string& fasta, 
-                               const bool show_ambiguously_mapped 
+                               const bool show_ambiguously_mapped,
+                               const uint32_t minimum_mapping_quality = 0
                                );
       //! Destructor.
       virtual ~Alignment_Output_Pileup();
@@ -167,6 +168,8 @@ namespace breseq
       virtual void fetch_callback ( const alignment_wrapper& a );
       
       bool _show_ambiguously_mapped;
+      uint32_t _minimum_mapping_quality;
+      
       Aligned_Reads aligned_reads;
       Aligned_References aligned_references;
       Aligned_Annotation aligned_annotation;
@@ -191,6 +194,7 @@ namespace breseq
     int32_t m_junction_minimum_size_match;
     bool m_mask_ref_matches;    // Show matches to reference as '.' rather than base.
     bool m_show_ambiguously_mapped;
+    uint32_t m_minimum_mapping_quality; // Show reads as redundantly matched if their mapping quality is below this
     bool m_is_junction, m_is_junction_junction; // Former for JC, latter for JC+junction part of it
     
     // Characters substituted for gaps and reference matches
@@ -199,6 +203,7 @@ namespace breseq
     static char s_reference_match_character;          // Default = "."
     static char s_reference_match_masked_character;   // Default = ","
     
+    static uint8_t k_reserved_quality_start;
     static uint8_t k_reserved_quality_junction_overlap;
     static uint8_t k_reserved_quality_dont_highlight;
     static uint8_t k_reserved_quality_max;
@@ -212,12 +217,14 @@ namespace breseq
                       const uint32_t quality_score_cutoff = 0,
                       const int32_t junction_minimum_size_match = 1,
                       const bool mask_ref_matches = false,
-                      const bool show_ambiguously_mapped = false
+                      const bool show_ambiguously_mapped = false,
+                      const uint32_t minimum_mapping_quality = 0
                       );
     //! Output an HTML alignment.
     void create_alignment ( const string& region, cOutputEvidenceItem * output_evidence_item = NULL );
     string html_alignment ( const string& region, cOutputEvidenceItem * output_evidence_item = NULL );
     string text_alignment ( const string& region, cOutputEvidenceItem * output_evidence_item = NULL );
+    string json_alignment ( const string& region, cOutputEvidenceItem * output_evidence_item = NULL );
     void set_quality_range(const uint32_t quality_score_cutoff = 0);
   private:
     uint32_t no_color_index;
@@ -227,6 +234,8 @@ namespace breseq
     string html_legend();
     string text_alignment_line(const Alignment_Base& a, const bool coords);
     string text_alignment_strand(const int8_t &strand);
+    json json_alignment_line(const Alignment_Base& a);
+
     
     static bool sort_by_aligned_bases_length ( const Sorted_Key& a, const Sorted_Key& b )
     {

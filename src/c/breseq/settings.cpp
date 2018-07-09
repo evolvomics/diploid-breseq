@@ -210,10 +210,12 @@ namespace breseq
     options.addUsage("", ADVANCED_OPTION);
     options.addUsage("Read Alignment Options", ADVANCED_OPTION);
     options
+    ("minimum-mapping-quality,m", "Ignore alignments with less than this mapping quality (MQ) when calling mutations. MQ scores are equal to -10log10(P), where P is the probability that the best alignment is not to the correct location in the reference genome. The range of MQ scores returned by bowtie2 is 0 to 255.", 0, ADVANCED_OPTION)
     ("base-quality-cutoff,b", "Ignore bases with quality scores lower than this value", 3, ADVANCED_OPTION)
     ("quality-score-trim", "Trim the ends of reads past any base with a quality score below --base-quality-score-cutoff.", TAKES_NO_ARGUMENT, ADVANCED_OPTION)
     ("require-match-length", "Only consider alignments that cover this many bases of a read", 0, ADVANCED_OPTION)
     ("require-match-fraction", "Only consider alignments that cover this fraction of a read", 0.9, ADVANCED_OPTION)
+    ("maximum-read-mismatches", "Don't consider reads with this many or more bases or indels that are different from the reference sequence. Unaligned bases at the end of a read also count as mismatches. Unaligned bases at the beginning of the read do NOT count as mismatches. (DEFAULT=OFF)", "", ADVANCED_OPTION)
     ("deletion-coverage-propagation-cutoff","Value for coverage above which deletions are cutoff. 0 = calculated from coverage distribution", 0, ADVANCED_OPTION)
     ("deletion-coverage-seed-cutoff","Value for coverage below which deletions are seeded", 0, ADVANCED_OPTION)
     ;
@@ -232,7 +234,7 @@ namespace breseq
     options.addUsage("Junction (JC) Evidence Options", ADVANCED_OPTION);
     options
     ("no-junction-prediction", "Do not predict new sequence junctions", TAKES_NO_ARGUMENT)
-    ("junction-indel-split-length", "Split read alignments on indels of this many or more bases. Indel mutations of this length or longer will be prdicted by JC evidence and those that are shorter will be predicted from RA evience", 3, ADVANCED_OPTION)
+    ("junction-indel-split-length", "Split read alignments on indels of this many or more bases. Indel mutations of this length or longer will be predicted by JC evidence and those that are shorter will be predicted from RA evience", 3, ADVANCED_OPTION)
     ("junction-alignment-pair-limit", "Only consider this many passed alignment pairs when creating candidate junction sequences (0 = DO NOT LIMIT)", 100000, ADVANCED_OPTION)
     ("junction-minimum-candidates", "Test at least this many of the top-scoring junction candidates, regardless of their length", 100, ADVANCED_OPTION)
     ("junction-maximum-candidates", "Test no more than this many of the top-scoring junction candidates (0 = DO NOT LIMIT)", 5000, ADVANCED_OPTION)
@@ -427,7 +429,10 @@ namespace breseq
 
     this->require_match_length = from_string<uint32_t>(options["require-match-length"]);
     this->require_match_fraction = from_string<double>(options["require-match-fraction"]);
-
+    if (options.count("maximum-read-mismatches")) {
+        this->maximum_read_mismatches = from_string<int32_t>(options["maximum-read-mismatches"]);
+    }
+    
     //! Settings: Mutation Identification
     this->base_quality_cutoff = from_string<uint32_t>(options["base-quality-cutoff"]);
     if (options.count("quality-score-trim")) this->quality_score_trim = this->base_quality_cutoff;
@@ -442,7 +447,7 @@ namespace breseq
     if (options.count("bowtie2-scoring")) this->bowtie2_scoring = options["bowtie2-scoring"];
     if (options.count("bowtie2-stage1")) this->bowtie2_stage1 = options["bowtie2-stage1"];
     if (options.count("bowtie2-stage2")) this->bowtie2_stage2 = options["bowtie2-stage2"];
-    if (options.count("bowtie2-junction")) this->bowtie2_scoring = options["bowtie2-junction"];
+    if (options.count("bowtie2-junction")) this->bowtie2_junction = options["bowtie2-junction"];
 
     //! Settings: Junction Prediction
     this->skip_junction_prediction = options.count("no-junction-prediction");
@@ -465,6 +470,8 @@ namespace breseq
     
     this->polymorphism_prediction = options.count("polymorphism-prediction");
     if (this->polymorphism_prediction) {
+      
+      this->minimum_mapping_quality = 0;
       
       this->mutation_log10_e_value_cutoff = 10;
       this->consensus_frequency_cutoff = 0; // zero is OFF - ensures any rejected poly with high freq move to consensus!
@@ -496,6 +503,8 @@ namespace breseq
     // This is strictly true if we are not in polymorphism mode...
     else /* if (this->mixed_base_prediction)*/ {
 
+      this->minimum_mapping_quality = 0;
+      
       this->mutation_log10_e_value_cutoff = 10;
       this->consensus_frequency_cutoff = 0.8;
       this->consensus_minimum_variant_coverage = 0;
@@ -522,6 +531,10 @@ namespace breseq
     }
     
     // override the default settings
+    
+    if (options.count("minimum-mapping-quality")) {
+      this->minimum_mapping_quality = from_string<int32_t>(options["minimum-mapping-quality"]);
+    }
     
     if (options.count("junction-indel-split-length"))
       this->preprocess_junction_min_indel_split_length = from_string<int32_t>(options["junction-indel-split-length"]);

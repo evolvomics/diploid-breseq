@@ -387,8 +387,6 @@ namespace breseq {
     //  
     
     public:
-
-      static const string feature_list_separator;
     
       // Could add accessors that convert strings to numbers...
       cFeatureLocationList m_locations;
@@ -545,14 +543,7 @@ namespace breseq {
       bool start_is_indeterminate() { return m_start_is_indeterminate; }
       bool end_is_indeterminate() { return m_end_is_indeterminate; }
     
-      void make_feature_safe() {
-        const vector<string> fields = make_vector<string>("name")("product")("type");
-        
-        for (vector<string>::const_iterator it=fields.begin(); it !=fields.end(); it++)
-        if (this->SafeGet("product") != "") {
-          (*this)[*it] = substitute((*this)[*it], feature_list_separator, ",");
-        }
-      }
+      void make_feature_strings_safe();
   };
   
   //!< Subclass of reference features with more information
@@ -603,7 +594,8 @@ namespace breseq {
       string m_description; // GenBank (DEFINITION) | GFF (description), from main feature line
       string m_seq_id;      // GenBank (LOCUS)      | GFF (seqid), from ##sequence-region line
       string m_file_name;   // Name of file this sequence was loaded from
-    
+      string m_file_format; // Format of file used to load sequence
+
       cFastaSequence m_fasta_sequence;            //!< Nucleotide sequence
     
       // Features are stored as counted pointers so that we can have ready-made lists
@@ -640,6 +632,11 @@ namespace breseq {
       void set_sequence_loaded_from_file(const string& file_name, bool allow_reload = false) {
         ASSERT(allow_reload || (m_sequence_loaded_from_file.size() == 0), "Duplicate seq id found in file '" + file_name + "'! DNA sequence for '" + m_seq_id + "' was already loaded from file '" + m_sequence_loaded_from_file + "'.")
         m_sequence_loaded_from_file = file_name;
+      }
+    
+      void set_file_format(const string& file_format) {
+        if (m_file_format.length() > 0) m_file_format += "+";
+        m_file_format += file_format;
       }
     
       void sort_features()
@@ -726,10 +723,10 @@ namespace breseq {
         return m_file_name;
       }
     
-      void make_features_safe() {
+      void make_feature_strings_safe() {
         for (list<cSequenceFeaturePtr>::iterator it = m_features.begin(); it != m_features.end(); it++)
         {
-          (*it)->make_feature_safe();
+          (*it)->make_feature_strings_safe();
         }
       }
 
@@ -795,9 +792,15 @@ namespace breseq {
     // Used for annotating mutations
     static const string intergenic_separator;
     static const string html_intergenic_separator;
+    static const string gene_list_separator;
+    static const string html_gene_list_separator;
     static const string no_gene_name;
+    static const string gene_range_separator;
     static const string multiple_separator;
     static const string html_multiple_separator;
+    static const string gene_strand_reverse_char;
+    static const string gene_strand_forward_char;
+
     static const double k_inactivate_overlap_fraction;
     static const int32_t k_promoter_distance;
     
@@ -814,15 +817,15 @@ namespace breseq {
     void LoadFile(const string& file_name, const vector<string>* ploidy=NULL)
       { LoadFiles(make_vector<string>(file_name), ploidy); }
     
-    //!< Fixes gene/product names so that our separator character is unique
-    void make_features_safe() {
+    //!< Fixes gene/product names so that our separator character is unique. Called after load.
+    void make_feature_strings_safe() {
       for (vector<cAnnotatedSequence>::iterator its= this->begin(); its != this->end(); its++) {
         cAnnotatedSequence& as = *its;
-        as.make_features_safe();
+        as.make_feature_strings_safe();
       }
     }
     
-    //!< Fixes gene lists and other properties. Called after load
+    //!< Updates gene lists and other properties. Called after load.
     void update_feature_lists() {
       for (vector<cAnnotatedSequence>::iterator its= this->begin(); its != this->end(); its++) {
         cAnnotatedSequence& as = *its;
@@ -888,7 +891,7 @@ namespace breseq {
     }
     
     //!< Calculates the total length of all reference sequences together
-    uint64_t total_length() const
+    uint64_t get_total_length() const
     {
       uint64_t ret_val(0);
       for (cReferenceSequences::const_iterator it = (*this).begin(); it != (*this).end(); it++)
@@ -896,6 +899,60 @@ namespace breseq {
         ret_val += it->m_length;
       }
       return ret_val;
+    }
+    
+    uint64_t get_total_num_genes() const
+    {
+      uint64_t ret_val(0);
+      for (cReferenceSequences::const_iterator it = (*this).begin(); it != (*this).end(); it++)
+      {
+        ret_val += it->m_genes.size();
+      }
+      return ret_val;
+    }
+    
+    uint64_t get_total_num_repeats() const
+    {
+      uint64_t ret_val(0);
+      for (cReferenceSequences::const_iterator it = (*this).begin(); it != (*this).end(); it++)
+      {
+        ret_val += it->m_repeats.size();
+      }
+      return ret_val;
+    }
+    
+    string get_file_formats() const
+    {
+      set<string> formats;
+      for (cReferenceSequences::const_iterator it = (*this).begin(); it != (*this).end(); it++)
+      {
+        vector<string> this_formats = split(it->m_file_format,"+");
+        for (vector<string>::const_iterator it2 = this_formats.begin(); it2 != this_formats.end(); it2++) {
+          formats.insert(*it2);
+        }
+      }
+      
+      vector<string> concat_formats;
+      std::copy(formats.begin(), formats.end(), std::back_inserter(concat_formats));
+      std::sort(concat_formats.begin(), concat_formats.end());
+      return join(concat_formats, "+");
+    }
+    
+    double get_total_gc_content() const
+    {
+      double gc = 0;
+      uint64_t len = 0;
+      for (cReferenceSequences::const_iterator it = (*this).begin(); it != (*this).end(); it++)
+      {
+        string s = it->m_fasta_sequence.get_sequence();
+        len+= s.size();
+        for (size_t i=0; i<s.length(); i++)
+        {
+          if ( (s[i] == 'G') ||(s[i] == 'C') )
+            gc++;
+        }
+      }
+      return gc / len;
     }
 
     void add_new_seq(const string& seq_id, const string& file_name)
@@ -1097,6 +1154,10 @@ namespace breseq {
     bool mutation_overlapping_gene_is_inactivating(const cDiffEntry& mut, const string& snp_type, const uint32_t start, const uint32_t end, const cGeneFeature& gene, const double inactivate_overlap_fraction);
     
     static string list_to_entry(const vector<string>& _list, const string& _ignore);
+    
+    // Cleans out intergenic and list separators
+    static string gene_strand_to_string(const bool forward)
+    { return (forward ? gene_strand_forward_char : gene_strand_reverse_char); }
     
     void annotate_1_mutation_in_genes(cDiffEntry& mut, vector<cFeatureLocation*>& within_gene_locs, uint32_t start, uint32_t end, bool ignore_pseudogenes);
     void annotate_1_mutation(cDiffEntry& mut, uint32_t start, uint32_t end, bool repeat_override = false, bool ignore_pseudogenes = false);

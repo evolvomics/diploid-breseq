@@ -62,10 +62,11 @@ int do_bam2aln(int argc, char* argv[]) {
   options("fasta,f", "FASTA file of reference sequences", "data/reference.fasta");
   options("output,o", "Output path. If there is just one region, the name of the output file (DEFAULT=region1.*). If there are multiple regions, this argument must be a directory path, and all output files will be output here with names region1.*, region2.*, ... (DEFAULT=.)");
   options("region,r", "Regions to create alignments for. Must be provided as sequence regions in the format ACCESSION:START-END, where ACCESSION is a valid identifier for one of the sequences in the FASTA file, and START and END are 1-indexed coordinates of the beginning and end positions. Any read overlapping these positions will be shown. A separate output file is created for each region. Regions may be provided at the end of the command line as unnamed arguments");
-  options("format", "Format of output alignment(s): HTML or TXT", "HTML");
+  options("format", "Format of output alignment(s): HTML, TXT, or JSON", "HTML");
   options("max-reads,n", "Maximum number of reads to show in alignment", 200);
   options("repeat", "Show reads with multiple best matches in reference", TAKES_NO_ARGUMENT, ADVANCED_OPTION);
-  options("quality-score-cutoff,c", "Quality score cutoff below which reads are highlighted as yellow", 0);
+  options("quality-score-cutoff,c", "Base quality score cutoff below which reads are highlighted as yellow", 0);
+  options("minimum-mapping-quality,m", "Mapping quality (MQ) score cutoff below which reads are counted as repeat matches (0=OFF)", 0);
   options("stdout", "Write output to stdout", TAKES_NO_ARGUMENT, ADVANCED_OPTION);
   options.processCommandArgs(argc, argv);
   
@@ -108,7 +109,7 @@ int do_bam2aln(int argc, char* argv[]) {
   }
   
   string format = to_upper(options["format"]);
-  if ((format != "HTML") && (format != "TXT")) {
+  if ((format != "HTML") && (format != "TXT") && (format != "JSON")) {
     options.addUsage("");
     options.addUsage("Unknown format requested: " + format);
     options.printUsage();
@@ -132,7 +133,8 @@ int do_bam2aln(int argc, char* argv[]) {
                         from_string<uint32_t>(options["quality-score-cutoff"]),
                         1,
                         false,
-                        options.count("repeat")
+                        options.count("repeat"),
+                        from_string<uint32_t>(options["minimum-mapping-quality"])
                         );
     
     string default_file_name = region_list[j];
@@ -144,6 +146,10 @@ int do_bam2aln(int argc, char* argv[]) {
     }
     else if (format == "TXT") {
       output_string = ao.text_alignment(region_list[j]);
+      default_file_name += ".txt";
+    }
+    else if (format == "JSON") {
+      output_string = ao.json_alignment(region_list[j]);
       default_file_name += ".txt";
     }
       
@@ -474,7 +480,7 @@ int do_convert_reference(int argc, char* argv[]) {
 	// make sure that the config options are good:
   if (options.getArgc() == 0) {
     options.addUsage("");
-    options.addUsage("No input reference file(s) provided (-r).");
+    options.addUsage("No input reference file(s) provided.");
 		options.printUsage();
     return -1;
 	}
@@ -539,6 +545,130 @@ int do_convert_reference(int argc, char* argv[]) {
   cerr << "+++   SUCCESSFULLY COMPLETED" << endl;
 	return 0;
 }
+
+int do_summarize_fastq(int argc, char* argv[])
+{
+  
+  // setup and parse configuration options:
+  AnyOption options("Usage: breseq SUMMARIZE-FASTQ [-o stdout] input.fastq");
+  options.addUsage("");
+  options.addUsage("Display summary statistics about FASTQ file.");
+  options.addUsage("");
+  options.addUsage("Allowed Options");
+  options("help,h", "Display detailed help message", TAKES_NO_ARGUMENT);
+  options("output,o", "output JSON file or stdout", "stdout");
+  
+  options.processCommandArgs(argc, argv);
+  
+  // handle help
+  if (options.count("help")) {
+    options.printAdvancedUsage();
+    return -1;
+  }
+  
+  if (options.getArgc() == 0) {
+    options.printUsage();
+    return -1;
+  }
+  
+  // make sure that the config options are good:
+  if (options.getArgc() != 1) {
+    options.addUsage("");
+    options.addUsage("Please provide exactly one input FASTQ file.");
+    options.printUsage();
+    return -1;
+  }
+  
+  string input_file_name = options.getArgv(0);
+  string output_file_name = options["output"];
+  string input_format = options["input-format"];
+  string output_format = options["output-format"];
+  
+  uint64_t num_original_reads;
+  uint64_t num_original_bases;
+  uint32_t read_length_min;
+  uint32_t read_length_max;
+  uint8_t min_quality_score;
+  uint8_t max_quality_score;
+  
+  input_format = cFastqQualityConverter::predict_fastq_file_format(input_file_name, num_original_reads, num_original_bases, read_length_min, read_length_max, min_quality_score, max_quality_score);
+  
+  json j = json{
+    //! Settings: Workflow
+    {"num_reads", num_original_reads},
+    {"num_bases", num_original_bases},
+    {"min_read_length", read_length_min},
+    {"max_read_length", read_length_max},
+    {"avg_read_length", double(num_original_bases)/num_original_reads},
+    {"min_quality_score", min_quality_score},
+    {"max_quality_score", max_quality_score},
+    {"format", input_format},
+  };
+  
+  if (options["output"] == "stdout") {
+    cout << j << endl;
+  } else {
+    ofstream output_file(options["output"]);
+    output_file << j;
+  }
+  
+  return 0;
+}
+
+int do_summarize_reference(int argc, char* argv[]) {
+  
+  // setup and parse configuration options:
+  AnyOption options("Usage: breseq SUMMARIZE-REFERENCE [-o stdout] input.gbk");
+  options.addUsage("");
+  options.addUsage("Display summary statistics about reference file.");
+  options.addUsage("");
+  options.addUsage("Allowed Options");
+  options("help,h", "Display detailed help message", TAKES_NO_ARGUMENT);
+  options("output,o", "output JSON file or stdout", "stdout");
+
+  options.processCommandArgs(argc, argv);
+  
+  if (options.count("help")) {
+    options.printUsage();
+    return -1;
+  }
+  
+  // make sure that the config options are good:
+  if (options.getArgc() == 0) {
+    options.addUsage("");
+    options.addUsage("No input reference file(s) provided.");
+    options.printUsage();
+    return -1;
+  }
+  
+  vector<string> reference_file_names;
+  for (int32_t i = 0; i < options.getArgc(); ++i) {
+    reference_file_names.push_back(options.getArgv(i));
+  }
+  
+  cReferenceSequences refs;
+  refs.LoadFiles(reference_file_names);
+  
+  json j = json{
+    //! Settings: Workflow
+    {"total_length", refs.get_total_length()},
+    {"num_sequences", refs.seq_ids().size()},
+    {"format", refs.get_file_formats()},
+    {"num_repeats", refs.get_total_num_repeats()},
+    {"num_genes", refs.get_total_num_genes()},
+    {"gc_content", refs.get_total_gc_content()},
+  };
+  
+  if (options["output"] == "stdout") {
+    cout << j << endl;
+  } else {
+    ofstream output_file(options["output"]);
+    output_file << j;
+  }
+  
+  return 0;
+}
+
 
 int do_get_sequence(int argc, char *argv[])
 {
@@ -1233,7 +1363,7 @@ int breseq_default_action(int argc, char* argv[])
                                       );
     
     conv_ref_seq_info.WriteGFF(settings.reference_gff3_file_name);
-    s.total_reference_sequence_length = conv_ref_seq_info.total_length();
+    s.total_reference_sequence_length = conv_ref_seq_info.get_total_length();
     
     // Do a quick load of the file to detect formatting errors.
     if (settings.user_evidence_genome_diff_file_name != "") {
@@ -1253,7 +1383,7 @@ int breseq_default_action(int argc, char* argv[])
       s.num_bases = 0;
       
       
-      uint64_t read_file_base_limit = floor(settings.read_file_coverage_fold_limit * static_cast<double>(conv_ref_seq_info.total_length())); 
+      uint64_t read_file_base_limit = floor(settings.read_file_coverage_fold_limit * static_cast<double>(conv_ref_seq_info.get_total_length())); 
       
       for (uint32_t i = 0; i < settings.read_files.size(); i++)
       {
@@ -1350,7 +1480,7 @@ int breseq_default_action(int argc, char* argv[])
   settings.init_reference_sets(ref_seq_info);
   
   // Calculate the total reference sequence length
-  summary.sequence_conversion.total_reference_sequence_length = ref_seq_info.total_length();
+  summary.sequence_conversion.total_reference_sequence_length = ref_seq_info.get_total_length();
   
   
   // Reload certain information into settings from summary to make re-entrant
@@ -2353,10 +2483,18 @@ int main(int argc, char* argv[]) {
 	command = to_upper(command);
   
   
+  // Commands that do not get the normal header go here
+  
   // gnu standard return version string
   if ( (argc_new == 1) && (command == "--VERSION") ) {
     cout << "breseq " << VERSION << endl;
     return 0;
+  }
+  
+  if (command == "SUMMARIZE-FASTQ") {
+    return do_summarize_fastq(argc_new, argv_new);
+  } else if (command == "SUMMARIZE-REFERENCE") {
+    return do_summarize_reference(argc_new, argv_new);
   }
   
   // Print out our generic header

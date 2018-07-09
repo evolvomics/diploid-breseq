@@ -40,6 +40,7 @@ const char* GENES="genes";
 const char* HTML_SEQ_ID="html_seq_id";
 const char* GENE_NAME="gene_name";
 const char* HTML_GENE_NAME="html_gene_name";
+const char* GENE_STRAND="gene_strand";
 const char* GENE_POSITION="gene_position";
 const char* HTML_POSITION="html_position";
 const char* HTML_MUTATION = "html_mutation";
@@ -238,7 +239,7 @@ void html_index(const string& file_name, const Settings& settings, Summary& summ
   if(!relative_path.empty())
     relative_path += "/";
   HTML << "<p>" << endl;
-  MutationTableOptions mt_options;
+  MutationTableOptions mt_options(settings);
   mt_options.relative_link = relative_path;
   mt_options.one_ref_seq = (ref_seq_info.size() == 1);
   HTML << Html_Mutation_Table_String(settings, gd, muts, mt_options) << endl;
@@ -1012,7 +1013,7 @@ string html_genome_diff_item_table_string(const Settings& settings, cGenomeDiff&
   //mutation
   if(first_item.is_mutation())
   {
-    MutationTableOptions mt_options;
+    MutationTableOptions mt_options(settings);
     mt_options.detailed=true;
     return Html_Mutation_Table_String(settings, gd, list_ref, mt_options); 
   }
@@ -1122,6 +1123,7 @@ string formatted_mutation_annotation(const cDiffEntry& mut)
   else // other SNP/mutation types that don't give amino acid change or no snp change
   {
     if(mut.entry_exists(GENE_POSITION)){
+      
       s += nonbreaking(
                        join(
                             split(
@@ -1949,44 +1951,147 @@ void draw_coverage(Settings& settings, cReferenceSequences& ref_seq_info, cGenom
 }
 
   
-void add_html_fields_to_mutation(cDiffEntry& mut, const Settings& settings, MutationTableOptions& options) {
+void add_html_fields_to_mutation(cDiffEntry& mut, MutationTableOptions& options)
+{
   
-  string cell_seq_id = nonbreaking(mut[SEQ_ID]);
-  string cell_position = commify(mut[POSITION]);
-  string cell_mutation;
-  string cell_mutation_annotation = formatted_mutation_annotation(mut); // Do NOT make nonbreaking
-  string cell_gene_name = nonbreaking(mut[HTML_GENE_NAME]);
-  string cell_gene_product = htmlize(substitute(mut[GENE_PRODUCT], cReferenceSequences::multiple_separator, cReferenceSequences::html_multiple_separator));
-  
-  // @MDS - If the product contains more than a set number of genes
-  // replace the name with the one that hides it with javascript.
-  if (!settings.no_javascript) {
-    if(mut.count(GENE_PRODUCT_HIDE) && (mut[GENE_PRODUCT_HIDE].size() > 0)) {
-      cell_gene_product = htmlize(mut[GENE_PRODUCT_HIDE]);
+  //Preflight checks
+  ASSERT(mut.entry_exists(GENE_NAME), "Could not find \"gene_name\" field for mutation.");
+  ASSERT(mut.entry_exists(GENE_STRAND), "Could not find \"gene_strand\" field for mutation.");
+
+  // Decide if we are intergenic or not and reformat appropriately
+  //  * italics for gene names
+  //  * javascript or concatenated gene names as when overlapping many genes
+  //  * annotate gene position
+  string html_gene_name;
+  string html_gene_product;
+    
+  if (mut[GENE_NAME].find(cReferenceSequences::intergenic_separator) != string::npos ) {
+    //
+    // Mutation is intergenic. There must be exactly two gene names and strands
+    //
+    
+    vector<string> gene_names = split(mut[GENE_NAME], cReferenceSequences::intergenic_separator);
+    vector<string> gene_strands = split(mut[GENE_STRAND], cReferenceSequences::intergenic_separator);
+    
+    ASSERT(gene_names.size() == 2, "Expected two gene names for intergenic mutation.");
+    ASSERT(gene_strands.size() == 2, "Expected two gene strands for intergenic mutation.");
+    
+    html_gene_name += "<i>" + gene_names[0] + "</i>";
+    if (gene_names[0] != cReferenceSequences::no_gene_name) {
+      html_gene_name += (gene_strands[0] == cReferenceSequences::gene_strand_reverse_char)
+        ? "&nbsp;&larr;"
+        : "&nbsp;&rarr;";
     }
+    html_gene_name += "&nbsp;";
+    html_gene_name += cReferenceSequences::html_intergenic_separator;
+    if (gene_names[1] != cReferenceSequences::no_gene_name) {
+      html_gene_name += (gene_strands[1] == cReferenceSequences::gene_strand_reverse_char)
+        ? "&nbsp;&larr;"
+        : "&nbsp;&rarr;";
+    }
+    html_gene_name += "&nbsp;";
+    html_gene_name += "<i>" + gene_names[1] + "</i>";;
+    
+    html_gene_product = mut[GENE_PRODUCT];
+    
+  } else if (mut[GENE_NAME].find(cReferenceSequences::gene_range_separator) != string::npos ) {
+    //
+    // Mutation covers a range of genes
+    //
+    
+    // IMPORTANT: gene names are stored as a list in GENE_PRODUCT not GENE_NAME in this case
+    vector<string> gene_names = split(mut[GENE_PRODUCT], cReferenceSequences::gene_list_separator);
+  
+    // add italics if there are true gene names
+    for(vector<string>::iterator it = gene_names.begin(); it != gene_names.end(); it++) {
+      if (*it != cReferenceSequences::no_gene_name) {
+        *it = "<i>" + *it + "</i>";
+      }
+    }
+    
+    html_gene_name = gene_names.front() + cReferenceSequences::gene_range_separator + gene_names.back();
+    
+    string sJoinedGeneList = join(gene_names, cReferenceSequences::html_gene_list_separator + " ");
+    
+    // If the product contains more than a set number of genes, show the number of genes
+    // and, if javascript is enabled, hide the gene names until a button is pushed.
+    
+    if (gene_names.size() < 15) {
+      html_gene_product += sJoinedGeneList;
+    } else {
+      
+      if (options.no_javascript) {
+        html_gene_product = "<b>" + to_string(gene_names.size()) + " genes</b><br>";
+        html_gene_product += sJoinedGeneList;
+      } else {
+        //javascript version
+        string id = "gene_hide_" + to_string(mut._type) + "_" + mut._id;
+        string button_id = id + "_button";
+        html_gene_product = "<b>" + to_string(gene_names.size()) + " genes</b>"
+        + "<noscript>" + sJoinedGeneList+ "</noscript>"
+        + "<div id=\"" + id + "\" class=\"hidden\">"
+        + sJoinedGeneList + "</div>"
+        + "<input id=\"" + button_id + "\" type=\"button\" onclick=\"hideTog('" + id + "');showTog('" + button_id + "')\" value=\"Show\" />";
+      }
+    }
+    
+  } else  {
+    //
+    // Mutation impacts one gene or a set of overlapping genes
+    //
+    
+    vector<string> gene_name_lists = split(mut[GENE_NAME], cReferenceSequences::multiple_separator);
+    vector<string> gene_strands = split(mut[GENE_STRAND], cReferenceSequences::multiple_separator);
+      
+    // add italics  and gene strands if there are true gene names
+    vector<string> html_gene_names;
+    for(vector<string>::iterator it = gene_name_lists.begin(); it != gene_name_lists.end(); it++) {
+      
+      if (*it != cReferenceSequences::no_gene_name) {
+        html_gene_names.push_back("<i>" + *it + "</i>" + ((gene_strands[0] == cReferenceSequences::gene_strand_reverse_char) ? "&nbsp;&larr;" : "&nbsp;&rarr;"));
+      } else {
+        html_gene_names.push_back(*it);
+      }
+    }
+      
+    html_gene_name = join(html_gene_names, cReferenceSequences::html_multiple_separator);
+    html_gene_product = substitute(mut[GENE_PRODUCT], cReferenceSequences::multiple_separator, cReferenceSequences::html_multiple_separator);
   }
+  
+  // htmlize as the final step
+  html_gene_name = htmlize(html_gene_name);
+  html_gene_product = htmlize(html_gene_product);
+
+  
+  // This four fields are filled by the code below
+  
+  string html_seq_id = nonbreaking(mut[SEQ_ID]);
+  string html_position = commify(mut[POSITION]);
+  
+  string html_mutation;
+  string html_mutation_annotation = formatted_mutation_annotation(mut); // Do NOT make nonbreaking
   
   // build 'mutation' column = description of the genetic change
   switch (mut._type)
   {
     case SNP:{
-      cell_mutation = mut["_ref_seq"] + "&rarr;" + mut[NEW_SEQ];
+      html_mutation = mut["_ref_seq"] + "&rarr;" + mut[NEW_SEQ];
     } break;
       
     case INS:{
       if (mut.entry_exists("repeat_seq")) {
         // alternative way of depicting
-        cell_mutation = "(" + mut["repeat_seq"] + ")" + "<sub>" + mut["repeat_ref_copies"] + "&rarr;" + mut["repeat_new_copies"] + "</sub>";
+        html_mutation = "(" + mut["repeat_seq"] + ")" + "<sub>" + mut["repeat_ref_copies"] + "&rarr;" + mut["repeat_new_copies"] + "</sub>";
         //cell_mutation = mut["repeat_seq"] + "&times;" + mut["repeat_ref_copies"] + "&rarr;" + mut["repeat_new_copies"];
       }
       // If repeat seq is very long, it will not be present
       else if (mut.entry_exists("repeat_length")) {
-        cell_mutation = "(" + mut["repeat_length"] + " bp)" + "<sub>" + mut["repeat_ref_copies"] + "&rarr;" + mut["repeat_new_copies"] + "</sub>";
+        html_mutation = "(" + mut["repeat_length"] + " bp)" + "<sub>" + mut["repeat_ref_copies"] + "&rarr;" + mut["repeat_new_copies"] + "</sub>";
       }
-      else if (options.detailed || (mut["new_seq"].size() <= settings.max_nucleotides_to_show_in_tables)) {
-        cell_mutation = "+" + mut[NEW_SEQ];
+      else if (options.detailed || (mut["new_seq"].size() <= options.max_nucleotides_to_show_in_tables)) {
+        html_mutation = "+" + mut[NEW_SEQ];
       } else {
-        cell_mutation = "+" + s(mut[NEW_SEQ].size()) + " bp";
+        html_mutation = "+" + s(mut[NEW_SEQ].size()) + " bp";
       }
     } break;
       
@@ -1995,14 +2100,14 @@ void add_html_fields_to_mutation(cDiffEntry& mut, const Settings& settings, Muta
       if (mut.entry_exists("repeat_seq")) {
         // alternative way of depicting
         if (mut["repeat_seq"].size() > 12) {
-          cell_mutation = "(" + to_string<int32_t>(mut["repeat_seq"].size()) + "-bp)" + "<sub>" + mut["repeat_ref_copies"] + "&rarr;" + mut["repeat_new_copies"] + "</sub>";
+          html_mutation = "(" + to_string<int32_t>(mut["repeat_seq"].size()) + "-bp)" + "<sub>" + mut["repeat_ref_copies"] + "&rarr;" + mut["repeat_new_copies"] + "</sub>";
         } else {
-          cell_mutation = "(" + mut["repeat_seq"] + ")" + "<sub>" + mut["repeat_ref_copies"] + "&rarr;" + mut["repeat_new_copies"] + "</sub>";
+          html_mutation = "(" + mut["repeat_seq"] + ")" + "<sub>" + mut["repeat_ref_copies"] + "&rarr;" + mut["repeat_new_copies"] + "</sub>";
         }
         //cell_mutation = mut["repeat_seq"] + "&times;" + mut["repeat_ref_copies"] + "&rarr;" + mut["repeat_new_copies"];
       }
       else {
-        cell_mutation = nonbreaking("&Delta;" + commify(mut["size"]) + " bp");
+        html_mutation = nonbreaking("&Delta;" + commify(mut["size"]) + " bp");
         
         string annotation_str;
         
@@ -2015,20 +2120,20 @@ void add_html_fields_to_mutation(cDiffEntry& mut, const Settings& settings, Muta
         if(annotation_str.empty()) {
           annotation_str = nonbreaking(mut["gene_position"]);
         }
-        cell_mutation_annotation =  nonbreaking(annotation_str);
+        html_mutation_annotation =  nonbreaking(annotation_str);
       }
     } break;
       
     case SUB:{
       if (options.detailed || (mut["new_seq"].size() <= 4)) {
-        cell_mutation = nonbreaking(mut["size"] + " bp&rarr;" + mut["new_seq"]);
+        html_mutation = nonbreaking(mut["size"] + " bp&rarr;" + mut["new_seq"]);
       } else {
-        cell_mutation = nonbreaking(mut["size"] + " bp&rarr;" + s(mut["new_seq"].size()) + " bp");
+        html_mutation = nonbreaking(mut["size"] + " bp&rarr;" + s(mut["new_seq"].size()) + " bp");
       }
     } break;
       
     case CON:{
-      cell_mutation = nonbreaking(mut["size"] + " bp&rarr;" + mut["region"]);
+      html_mutation = nonbreaking(mut["size"] + " bp&rarr;" + mut["region"]);
     } break;
       
     case MOB:{
@@ -2077,20 +2182,20 @@ void add_html_fields_to_mutation(cDiffEntry& mut, const Settings& settings, Muta
         s << " ::" << s_end.str();
       }
       
-      cell_mutation = nonbreaking(s.str());
+      html_mutation = nonbreaking(s.str());
     } break;
       
     case INV:{
-      cell_mutation = nonbreaking(commify(mut["size"]) + " bp inversion");
-      cell_gene_name = i(nonbreaking(substitute(mut["gene_name_1"], cReferenceSequences::multiple_separator, cReferenceSequences::html_multiple_separator))) + "&darr;" +
+      html_mutation = nonbreaking(commify(mut["size"]) + " bp inversion");
+      html_gene_name = i(nonbreaking(substitute(mut["gene_name_1"], cReferenceSequences::multiple_separator, cReferenceSequences::html_multiple_separator))) + "&darr;" +
       i(nonbreaking(substitute(mut["gene_name_2"], cReferenceSequences::multiple_separator, cReferenceSequences::html_multiple_separator)));
-      cell_gene_product = htmlize(substitute(mut["gene_product_1"], cReferenceSequences::multiple_separator, cReferenceSequences::html_multiple_separator)) + "&darr;" +
+      html_gene_product = htmlize(substitute(mut["gene_product_1"], cReferenceSequences::multiple_separator, cReferenceSequences::html_multiple_separator)) + "&darr;" +
       htmlize(substitute(mut["gene_product_2"], cReferenceSequences::multiple_separator, cReferenceSequences::html_multiple_separator));
     } break;
       
     case AMP:{
-      cell_mutation = nonbreaking(commify(mut["size"]) + " bp x " + mut["new_copy_number"]);
-      cell_mutation_annotation =
+      html_mutation = nonbreaking(commify(mut["size"]) + " bp x " + mut["new_copy_number"]);
+      html_mutation_annotation =
       from_string<uint32_t>(mut["new_copy_number"]) == 2 ?
       "duplication" : "amplification";
     } break;
@@ -2099,14 +2204,14 @@ void add_html_fields_to_mutation(cDiffEntry& mut, const Settings& settings, Muta
       break;
   }
 
-  mut[HTML_SEQ_ID] = cell_seq_id;
-  mut[HTML_POSITION] = cell_position;
-  mut[HTML_GENE_NAME] = cell_gene_name;
-  mut[HTML_MUTATION] = cell_mutation;
-  mut[HTML_MUTATION_ANNOTATION] = cell_mutation_annotation;
-  mut[HTML_GENE_NAME] = cell_gene_name;
-  mut[HTML_GENE_PRODUCT] = cell_gene_product;
-  
+  // This is the order of the columns shown in a results table
+  mut[HTML_SEQ_ID] = html_seq_id;
+  mut[HTML_POSITION] = html_position;
+  mut[HTML_GENE_NAME] = html_gene_name;
+  mut[HTML_MUTATION] = html_mutation;
+  mut[HTML_MUTATION_ANNOTATION] = html_mutation_annotation;
+  mut[HTML_GENE_NAME] = html_gene_name;
+  mut[HTML_GENE_PRODUCT] = html_gene_product;
 }
   
 /*
@@ -2346,7 +2451,7 @@ void Html_Mutation_Table_String::Item_Lines()
       
     // ### marshal cells defined depending on mutation type/Users/jbarrick/src/breseq/src/c/breseq/alignment_output.cpp
     
-    add_html_fields_to_mutation(mut, settings, options);
+    add_html_fields_to_mutation(mut, options);
     
     // ###### PRINT THE TABLE ROW ####
     ss << endl << "<!-- Print The Table Row -->" << endl; 
@@ -2855,7 +2960,7 @@ cOutputEvidenceFiles::html_evidence_file (
       item["base_quality_cutoff"] = to_string(settings.base_quality_cutoff);
     
     if ( file_exists(item[BAM_PATH].c_str()) && file_exists(item[FASTA_PATH].c_str()) ) {
-      alignment_output ao(item[BAM_PATH], item[FASTA_PATH], settings.max_displayed_reads, settings.base_quality_cutoff, settings.junction_minimum_side_match, settings.alignment_mask_ref_matches );
+      alignment_output ao(item[BAM_PATH], item[FASTA_PATH], settings.max_displayed_reads, settings.base_quality_cutoff, settings.junction_minimum_side_match, settings.alignment_mask_ref_matches, false, settings.minimum_mapping_quality );
     
       HTML << ao.html_alignment(ss.str(), &item);
     }
