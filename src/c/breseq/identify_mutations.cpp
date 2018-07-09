@@ -1855,6 +1855,7 @@ double identify_mutations_pileup::calculate_two_base_model_log10_likelihood(
   
 void cDiscreteSNPCaller::initialize(const uint32_t ploidy)
 {
+  this->clear_genotypes();
   _ploidy = ploidy;
   
   // Uniform priors across all bases.
@@ -1905,6 +1906,11 @@ void cDiscreteSNPCaller::initialize(const uint32_t ploidy)
   ASSERT( from_string<double>(ss.str()) == 1.0, "Prior probabilities do not sum to 1. (" + to_string(total_probability) + ").")
   
   reset(0);
+}
+  
+void cDiscreteSNPCaller::clear_genotypes() {
+  _log10_genotype_prior_probabilities.clear();
+  _genotype_vector.clear();
 }
   
 void cDiscreteSNPCaller::add_genotype(const string& genotype, double probability) {

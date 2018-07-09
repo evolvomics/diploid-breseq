@@ -188,6 +188,7 @@ namespace breseq {
     virtual ~cDiscreteSNPCaller() {};
 
     void initialize(const uint32_t ploidy);
+    void clear_genotypes();
     void add_genotype(const string& genotype, double probability);
     void reset(uint8_t ref_base_index);
     void update(
