@@ -1330,7 +1330,7 @@ string html_read_alignment_table_string(diff_entry_list_t& list_ref, bool show_d
       
       // Show information about the strands supporting the change
       
-      if ( (c[MAJOR_BASE] == c[REF_BASE]) || (c[MINOR_BASE] == c[REF_BASE]) || (c[MINOR_BASE] == "N") ) {
+      if ( (c[MAJOR_BASE] == c[REF_BASE]) || (c[MINOR_BASE] == c[REF_BASE]) || (c[MINOR_BASE] == "N") || (c[MAJOR_BASE] == "") || (c[MINOR_BASE] == "") ) {
       
       ss << tr("class=\"information_table_row\"", 
                td("colspan=\"" + to_string(total_cols) + "\"",
@@ -2597,7 +2597,7 @@ string Html_Mutation_Table_String::freq_cols(vector<string> freq_list)
  *  Description:  
  * =====================================================================================
  */
-cOutputEvidenceFiles::cOutputEvidenceFiles(const Settings& settings, cGenomeDiff& gd)
+cOutputEvidenceFiles::cOutputEvidenceFiles(const Settings& settings, const cReferenceSequences& ref_seq_info, cGenomeDiff& gd)
 {  
   // Fasta and BAM files for making alignments.
   string reference_bam_file_name = settings.reference_bam_file_name;
@@ -2864,7 +2864,7 @@ cOutputEvidenceFiles::cOutputEvidenceFiles(const Settings& settings, cGenomeDiff
   {  
     cOutputEvidenceItem& e = (*itr);
     //cerr << "Creating evidence file: " + e[FILE_NAME] << endl;   
-    html_evidence_file(settings, gd, e);
+    html_evidence_file(settings, ref_seq_info, gd, e);
   }
 }
 
@@ -2892,7 +2892,8 @@ void cOutputEvidenceFiles::add_evidence(const string& evidence_file_name_key, di
 // # 
 void 
 cOutputEvidenceFiles::html_evidence_file (
-                                    const Settings& settings, 
+                                    const Settings& settings,
+                                    const cReferenceSequences& ref_seq_info,
                                     cGenomeDiff& gd, 
                                     cOutputEvidenceItem& item
                                     )
@@ -2960,7 +2961,7 @@ cOutputEvidenceFiles::html_evidence_file (
       item["base_quality_cutoff"] = to_string(settings.base_quality_cutoff);
     
     if ( file_exists(item[BAM_PATH].c_str()) && file_exists(item[FASTA_PATH].c_str()) ) {
-      alignment_output ao(item[BAM_PATH], item[FASTA_PATH], settings.max_displayed_reads, settings.base_quality_cutoff, settings.junction_minimum_side_match, settings.alignment_mask_ref_matches, false, settings.minimum_mapping_quality );
+      alignment_output ao(item[BAM_PATH], item[FASTA_PATH], ref_seq_info, settings.max_displayed_reads, settings.base_quality_cutoff, settings.junction_minimum_side_match, settings.alignment_mask_ref_matches, false, settings.minimum_mapping_quality );
     
       HTML << ao.html_alignment(ss.str(), &item);
     }

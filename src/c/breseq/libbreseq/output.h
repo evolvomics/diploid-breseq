@@ -302,7 +302,7 @@ public:
   
 struct cOutputEvidenceFiles
 {
-  cOutputEvidenceFiles(const Settings& settings, cGenomeDiff& gd);
+  cOutputEvidenceFiles(const Settings& settings, const cReferenceSequences& ref_seq_info, cGenomeDiff& gd);
   
   vector<cOutputEvidenceItem> evidence_list;
   
@@ -310,7 +310,7 @@ struct cOutputEvidenceFiles
   
     void add_evidence(const string& file_name, diff_entry_ptr_t item,
                       diff_entry_ptr_t parent_item, map<string,string>& fields);
-    void html_evidence_file(const Settings& settings, cGenomeDiff& gd, cOutputEvidenceItem& item);
+    void html_evidence_file(const Settings& settings, const cReferenceSequences& ref_seq_info, cGenomeDiff& gd, cOutputEvidenceItem& item);
 };
   
 }// end output namespace

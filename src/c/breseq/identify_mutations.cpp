@@ -1144,10 +1144,25 @@ void identify_mutations_pileup::pileup_callback(const pileup& p) {
       } else {
         
         // Multiploid genome case!!
-        mut[REF_BASE] = ref_genotype;
-        mut[NEW_BASE] = best_genotype;
-        mut[MAJOR_BASE] = ref_genotype;
-        mut[MINOR_BASE] = best_genotype;
+        mut[REF_BASE] = internal_to_printable_genotype(ref_genotype);
+        mut[NEW_BASE] = internal_to_printable_genotype(best_genotype);
+        //mut[MAJOR_BASE] = internal_to_printable_genotype(ref_genotype);
+        //mut[MINOR_BASE] = internal_to_printable_genotype(best_genotype);
+        
+        vector<string> ref_covs;
+        for(size_t i=0; i<ref_genotype.length(); i++) {
+          vector<uint32_t>& cov = pos_info[static_cast<base_char>(ref_genotype[i])];
+          ref_covs.push_back(to_string(make_pair(static_cast<int32_t>(cov[2]), static_cast<int32_t>(cov[0]))));
+        }
+        mut[REF_COV] = join(ref_covs, ";");
+        
+        vector<string> new_covs;
+        for(size_t i=0; i<ref_genotype.length(); i++) {
+          vector<uint32_t>& cov = pos_info[static_cast<base_char>(best_genotype[i])];
+          new_covs.push_back(to_string(make_pair(static_cast<int32_t>(cov[2]), static_cast<int32_t>(cov[0]))));
+        }
+        mut[NEW_COV] = join(new_covs, ";");
+        
         mut[FREQUENCY] = "1";
         mut[TOTAL_COV] = to_string(make_pair(total_cov[2], total_cov[0]));
       }

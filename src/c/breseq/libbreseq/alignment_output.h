@@ -101,6 +101,7 @@ namespace breseq
         , ghost_seq_id("")
         , overlap_assigned(0)
         , overlap_not_assigned(0)
+        , chr_0(0)
          {}
          
       uint32_t reference_length;
@@ -111,6 +112,7 @@ namespace breseq
       uint32_t ghost_start, ghost_end;
       string ghost_seq_id;
       uint32_t overlap_assigned, overlap_not_assigned;
+      uint32_t chr_0; // 0-indexed chromosome
     };
     
     struct Aligned_Annotation: Alignment_Base
@@ -150,13 +152,15 @@ namespace breseq
     
   private:
     //! Builds Aligned_Reads, Aligned_References and Aligned_Annotation
+    
     class Alignment_Output_Pileup : public pileup_base
     {
     public:
       //! Constructor.
-      Alignment_Output_Pileup ( 
+      Alignment_Output_Pileup (
                                const string& bam, 
-                               const string& fasta, 
+                               const string& fasta,
+                               const cReferenceSequences& ref_seq_info,
                                const bool show_ambiguously_mapped,
                                const uint32_t minimum_mapping_quality = 0
                                );
@@ -167,6 +171,7 @@ namespace breseq
       //! Called for each aligned read.
       virtual void fetch_callback ( const alignment_wrapper& a );
       
+      const cReferenceSequences& _ref_seq_info;
       bool _show_ambiguously_mapped;
       uint32_t _minimum_mapping_quality;
       
@@ -185,6 +190,9 @@ namespace breseq
     Aligned_Reads m_aligned_reads;
     Aligned_References m_aligned_references;
     Aligned_Annotation m_aligned_annotation;
+    
+    // Necessary for additional info about multiploid reference genomes
+    const cReferenceSequences& m_ref_seq_info;
     
     // Display options
     Quality_Range m_quality_range;
@@ -212,7 +220,8 @@ namespace breseq
     //! Constructor.
     alignment_output ( 
                       string bam, 
-                      string fasta, 
+                      string fasta,
+                      const cReferenceSequences& ref_seq_info,
                       uint32_t in_maximum_to_align = 0, 
                       const uint32_t quality_score_cutoff = 0,
                       const int32_t junction_minimum_size_match = 1,

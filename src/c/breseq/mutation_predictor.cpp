@@ -1428,20 +1428,16 @@ namespace breseq {
     
 		///
 		// Gather together read alignment mutations that occur next to each other
-		// ...unless they are polymorphisms
+		// ...unless they are polymorphisms or we are using a multiploid reference
 		///
     
 		bool first_time = true;
 		cDiffEntry mut;
 		vector<cDiffEntry> muts;
     
-    
     for(diff_entry_list_t::iterator ra_it = ra.begin(); ra_it != ra.end(); ra_it++) //RA
     {
       cDiffEntry& item = **ra_it;
-      
-      // Avoid doing this for multiploid predictions
-      bool is_multiploid = (item[NEW_BASE].size()>1 || item[REF_BASE].size()>1);
       
       ///DEBUG
       //cout << item.as_string() << endl;
@@ -1451,6 +1447,9 @@ namespace breseq {
       string ra_ref_base = item[REF_BASE];
       string ra_new_base = item[NEW_BASE];
       double ra_variant_frequency = from_string<double>(item[FREQUENCY]);
+      
+      // Avoid doing this for multiploid predictions
+      bool is_multiploid = ref_seq_info.get_ploidy(ra_seq_id) > 1;
       
       // Sometimes a SNP might be called in a deleted area because the end was wrong,
 			// but it was corrected using a junction. (This catches this case.)
@@ -1478,6 +1477,11 @@ namespace breseq {
               || (mut[SEQ_ID] != item[SEQ_ID]) )
             same = false;
         }
+        
+        // Multiploid predictions are unphased, so we can't join adjacent ones
+        if (is_multiploid) {
+          same = false;
+        }
 			}
       
 			if (!same)
@@ -1493,13 +1497,14 @@ namespace breseq {
         ("end", item["position"])
         ("insert_start", item["insert_position"])
         ("insert_end", item["insert_position"])
-        ("ref_seq", (ra_ref_base != ".") ? ra_ref_base : "")
-        ("new_seq", (ra_new_base != ".") ? ra_new_base : "")
+        ("ref_seq", (printable_genotype_is_all_gaps(ra_ref_base) ? "" : ra_ref_base) )
+        ("new_seq", (printable_genotype_is_all_gaps(ra_new_base) ? "" : ra_new_base) )
 				;
         
         if (settings.polymorphism_prediction) {
           new_mut[FREQUENCY] = item.entry_exists(FREQUENCY) ? item[FREQUENCY] : "1";
         }
+        
 				mut = new_mut;
 			}
 			else
@@ -1508,8 +1513,8 @@ namespace breseq {
         ("insert_end", item["insert_position"])
         ("end", item["position"])
 				;
-        mut["ref_seq"] += (ra_ref_base != ".") ? ra_ref_base : "";
-				mut["new_seq"] += (ra_new_base != ".") ? ra_new_base : "";
+        mut["ref_seq"] += (printable_genotype_is_all_gaps(ra_ref_base) ? "" : ra_ref_base);
+				mut["new_seq"] += (printable_genotype_is_all_gaps(ra_new_base) ? "" : ra_new_base);
 				mut._evidence.push_back(item._id);
 			}
 		}
@@ -1526,8 +1531,13 @@ namespace breseq {
       if (i>0) last_mut = mut;
 			mut = muts[i];
       
+      uint32_t ploidy = ref_seq_info.get_ploidy(mut[SEQ_ID]);
+      uint32_t ref_seq_length = printable_genotype_to_length(mut["ref_seq"], ploidy);
+      uint32_t new_seq_length = printable_genotype_to_length(mut["new_seq"], ploidy);
+      
+      
       // insertion and amplification
-			if (mut["ref_seq"].size() == 0)
+			if (ref_seq_length == 0)
 			{
         mut._type = INS;
 				// unused fields
@@ -1542,7 +1552,6 @@ namespace breseq {
           mut["insert_position"] = mut["insert_start"];
         } else { // CONSENSUS mode
           
-
           // We have a problem sometimes with certain non-adjacent columns passing the
           // score threshold for example, due to differences in error rates
           // the C columns might pass with insert_positions 3, 6, 9.
@@ -1572,17 +1581,17 @@ namespace breseq {
         }
 			}
 			// deletion
-			else if (mut["new_seq"].size() == 0)
+			else if (new_seq_length == 0)
 			{
         mut._type = DEL;
-				mut["size"] = s(n(mut["end"]) - n(mut["start"]) + 1);
+        mut["size"] = s(n(mut["end"]) - n(mut["start"]) + 1);
         
 				// unused fields
 				mut.erase("new_seq");
 				mut.erase("ref_seq");
 			}
 			// block substitution
-			else if ((mut["ref_seq"].size() > 1) || (mut["new_seq"].size() > 1))
+			else if (!mut.entry_exists("multiploid") && ((ref_seq_length > 1) || (new_seq_length > 1)))
 			{
         // This loop will go through the RA evidence for this SUB, and find the lowest
         // RA that has a ref_base of A,C,T, or G.        
@@ -1598,7 +1607,7 @@ namespace breseq {
         if(iRefPos > -1)mut["position"] = to_string(iRefPos);
         
         mut._type = SUB;
-				mut["size"] = s(mut["ref_seq"].size());
+				mut["size"] = s(ref_seq_length);
 				mut.erase("ref_seq");
 			}
 			//snp
@@ -1608,6 +1617,7 @@ namespace breseq {
         mut._type = SNP;
 			}
       
+      mut.erase("multiploid");
 			mut.erase("start");
 			mut.erase("end");
 			mut.erase("insert_start");

@@ -3371,12 +3371,16 @@ void cReferenceSequences::annotate_mutations(cGenomeDiff& gd, bool only_muts, bo
     cDiffEntry& mut= **it;
     if (verbose) cerr << "Annotating: " << mut << endl;
 
+    // Add ploidy info
+    uint32_t ploidy = (*this)[mut["seq_id"]].get_ploidy();
+    mut["_ploidy"] = s(ploidy);
+    
     if (only_muts && !(mut.is_mutation())) continue;
     
     switch (mut._type)
     {
       case SNP:{
-        mut["_ref_seq"] = get_sequence_1(mut["seq_id"], from_string<uint32_t>(mut["position"]), from_string<int32_t>(mut["position"]));
+        mut["_ref_seq"] = internal_to_printable_genotype(get_genotype_1(mut["seq_id"], from_string<uint32_t>(mut["position"])));
         annotate_1_mutation(mut, mut.get_reference_coordinate_start().get_position(), mut.get_reference_coordinate_end().get_position(), false, ignore_pseudogenes);
       } break;
         

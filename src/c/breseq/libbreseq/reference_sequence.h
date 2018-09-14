@@ -33,6 +33,38 @@ namespace breseq {
   // Pre-declaration
 	class Settings;
   
+  
+  
+  inline string internal_to_printable_genotype(const string& internal_genotype)
+  {
+    string s = internal_genotype;
+    size_t num_genotypes = s.size();
+    for (size_t i=1; i<num_genotypes; i++) {
+      s.insert(i*2-1,"/");
+    }
+    return s;
+  }
+  
+  inline bool printable_genotype_is_all_gaps(const string& internal_genotype)
+  {
+    bool allgaps = true;
+    vector<string> s = split(internal_genotype, "/");
+    for (vector<string>::iterator it = s.begin(); it != s.end(); it++) {
+      allgaps = allgaps && (*it == ".");
+    }
+    return allgaps;
+  }
+  
+  inline uint32_t printable_genotype_to_length(const string& internal_genotype, uint32_t ploidy)
+  {
+    if (ploidy == 1) {
+      return internal_genotype.length();
+    } else {
+      vector<string> v = split(internal_genotype, ";");
+      return v.size();
+    }
+  }
+  
   /* Position for dealing with things that are relative to reference genom
     and the annoying issues of insert counts
   */

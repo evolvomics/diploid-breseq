@@ -42,11 +42,13 @@ uint8_t alignment_output::k_reserved_quality_max = 255;
   
 alignment_output::Alignment_Output_Pileup::Alignment_Output_Pileup ( 
                                                                     const string& bam, 
-                                                                    const string& fasta, 
+                                                                    const string& fasta,
+                                                                    const cReferenceSequences& ref_seq_info,
                                                                     const bool show_ambiguously_mapped,
                                                                     const uint32_t minimum_mapping_quality
                                                                     )
         : pileup_base ( bam, fasta )
+        , _ref_seq_info(ref_seq_info)
         , _show_ambiguously_mapped(show_ambiguously_mapped)
         , _minimum_mapping_quality(minimum_mapping_quality)
         , unique_start ( 0 )
@@ -211,11 +213,16 @@ void alignment_output::Alignment_Output_Pileup::pileup_callback( const pileup& p
   
   
   // ##now handle the reference sequences
-  char ref_base = p.reference_base_char_1(reference_pos_1);
+  
+  
   
   for ( uint32_t index = 0; index < aligned_references.size(); index ++ )
-  {    
+  {
     Aligned_Reference& aligned_reference ( aligned_references[index] );    
+   
+    char ref_base = (aligned_reference.chr_0 == 0)
+            ? p.reference_base_char_1(reference_pos_1)
+            : _ref_seq_info[p.target()].get_char_1(reference_pos_1, aligned_reference.chr_0) ;
     
     // Default is to show reference 
     char my_ref_base = ref_base;
@@ -316,7 +323,8 @@ void alignment_output::Alignment_Output_Pileup::fetch_callback ( const alignment
 
   
 alignment_output::alignment_output ( string bam, 
-                                    string fasta, 
+                                    string fasta,
+                                    const cReferenceSequences& ref_seq_info,
                                     uint32_t maximum_to_align, 
                                     const uint32_t quality_score_cutoff,
                                     const int32_t junction_minimum_size_match,
@@ -324,8 +332,9 @@ alignment_output::alignment_output ( string bam,
                                     const bool show_ambiguously_mapped,
                                     const uint32_t minimum_mapping_quality
                                     )
-        : m_alignment_output_pileup ( bam, fasta, show_ambiguously_mapped, minimum_mapping_quality )
+        : m_alignment_output_pileup ( bam, fasta, ref_seq_info, show_ambiguously_mapped, minimum_mapping_quality )
         , m_aligned_reads ( m_alignment_output_pileup.aligned_reads )
+        , m_ref_seq_info ( ref_seq_info )
         , m_quality_score_cutoff ( quality_score_cutoff )
         , m_maximum_to_align ( maximum_to_align )
         , m_junction_minimum_size_match ( junction_minimum_size_match )
@@ -425,12 +434,15 @@ void alignment_output::create_alignment ( const string& region, cOutputEvidenceI
   else
   {
     ///Single Reference case
-    Aligned_Reference aligned_reference;
-    aligned_reference.target_id = target_id;
-    aligned_reference.seq_id = m_alignment_output_pileup.target_name(target_id);
-    aligned_reference.reference_length = m_alignment_output_pileup.target_length(target_id);
-    aligned_reference.strand = +1;
-    m_alignment_output_pileup.aligned_references.push_back(aligned_reference);
+    for (uint32_t i=0; i<m_ref_seq_info[target_id].get_ploidy(); i++ ) {
+      Aligned_Reference aligned_reference;
+      aligned_reference.target_id = target_id;
+      aligned_reference.seq_id = m_alignment_output_pileup.target_name(target_id);
+      aligned_reference.reference_length = m_alignment_output_pileup.target_length(target_id);
+      aligned_reference.strand = +1;
+      aligned_reference.chr_0 = i;
+      m_alignment_output_pileup.aligned_references.push_back(aligned_reference);
+    }
   }
 
   // Use fetch to determine the list of reads that will be aligned to this position

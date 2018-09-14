@@ -116,6 +116,10 @@ int do_bam2aln(int argc, char* argv[]) {
     return -1;
   }
   
+  cReferenceSequences ref_seq_info;
+  ref_seq_info.LoadFiles(make_vector<string>(options["fasta"]));
+
+  
   cerr << "COMMAND: BAM2ALN" << endl;
   cerr << "+++   Creating alignments..." << endl;
 
@@ -129,6 +133,7 @@ int do_bam2aln(int argc, char* argv[]) {
     alignment_output ao(
                         options["bam"],
                         options["fasta"],
+                        ref_seq_info,
                         from_string<uint32_t>(options["max-reads"]),
                         from_string<uint32_t>(options["quality-score-cutoff"]),
                         1,
@@ -2425,7 +2430,7 @@ int breseq_default_action(int argc, char* argv[])
 		// Create evidence files containing alignments and coverage plots
 		// --- must occur after marking entries no_show
 		if (!settings.skip_alignment_or_plot_generation)
-			output::cOutputEvidenceFiles(settings, gd);
+			output::cOutputEvidenceFiles(settings, ref_seq_info, gd);
 
 		///
 		// HTML output
