@@ -814,7 +814,7 @@ namespace breseq {
     bool m_initialized;
     bool m_use_safe_seq_ids;
     map<string,string> m_seq_id_to_original_file_name;
-    vector<string> vcf_lines; // This is a bit of a cheat, we keep the VCF lines for writing out
+    vector<string> vcf_lines; // VCF to write out and read back in with a FASTA for diploid mode
 
     //!< Currently supported file types.
     enum FileType {UNKNOWN, GENBANK, FASTA, GFF3, VCF, BULL};

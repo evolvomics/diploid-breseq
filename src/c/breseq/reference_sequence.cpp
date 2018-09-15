@@ -769,7 +769,7 @@ namespace breseq {
   {
     list<string> sorted_unique_file_names(file_names.begin(), file_names.end());
     
-    // **PLOIDY**
+    // **START PLOIDY**
     // Pre-flight check on the ploidy
     map<string, uint32_t> file_name_to_ploidy;
 
@@ -796,7 +796,7 @@ namespace breseq {
         }
       }
     }
-    // **PLOIDY**
+    // **END PLOIDY**
     
     //Removes non-unique file names. Must be done after assigning ploidies to original file names
     sorted_unique_file_names.unique();
@@ -808,11 +808,6 @@ namespace breseq {
       this->PrivateLoadFile(*it);
     }
     
-    this->VerifySequenceFeatureMatch();
-    this->m_initialized = true;
-    
-    this->standardize_sequences();
-    
     // Make certain feature items safe for GenomeDiff and HTML output operations
     // that divide them into lists, add intergenic, or multiple-item separators etc.
     this->make_feature_strings_safe();
@@ -820,7 +815,7 @@ namespace breseq {
     // Finally, update feature lists
     this->update_feature_lists();
     
-    // **PLOIDY**
+    // **START PLOIDY**
     // Update/check ploidy
     if (ploidy && ploidy->size()) {
 
@@ -844,7 +839,14 @@ namespace breseq {
         } // for reference sequence
       } // for file_name
     }
-  // **PLOIDY**
+    // **END PLOIDY**
+
+    this->VerifySequenceFeatureMatch();
+    
+    // Standardize sequences last. This will use ambiguous bases to fill in
+    // the requested ploidy (diploid only)
+    this->standardize_sequences();
+    this->m_initialized = true;
   }
   
   void cReferenceSequences::PrivateLoadFile(const string& file_name)
@@ -891,6 +893,7 @@ namespace breseq {
     else if(file_type == UNKNOWN) {
       ERROR("Could not determine format of reference file: " + file_name);
     }
+    
     //! Step 2: Load appropriate file
     
     // Save where we were so we can set ploidy going forward
@@ -969,26 +972,129 @@ namespace breseq {
     for(size_t i=0; i<this->size(); i++) {
       size_t ploidy = (*this)[i].m_fasta_sequence.get_ploidy();
       
+      vector<string> chr_sequences;
+      
+      // Number of bad characters that were changed in this sequence
+      map<char,uint32_t> bad_char;
+      
+      // First make sure everything is uppercase
       for(size_t chr_0=0; chr_0<ploidy; chr_0++) {
-
-        // Uppercase
-        string this_sequence = to_upper((*this)[i].m_fasta_sequence.get_sequence(chr_0));
+        chr_sequences.push_back(to_upper((*this)[i].m_fasta_sequence.get_sequence(chr_0)));
+      }
+      
+      // Use IUPAC designations to fill in genotypes (only for diploid case)
+      if (ploidy == 2) {
+        
+        for (size_t j=0; j<chr_sequences[0].size(); j++) {
+          
+          // Both sequences must have the same character
+          // (they might have been changed by loading a VCF file)
+          char on_char = chr_sequences[0][j];
+          if (chr_sequences[1][j] != on_char) continue;
+          
+          switch (on_char) {
+            case 'R':
+              chr_sequences[0][j] = 'A';
+              chr_sequences[1][j] = 'G';
+            break;
+              
+            case 'Y':
+              chr_sequences[0][j] = 'C';
+              chr_sequences[1][j] = 'T';
+            break;
+              
+            case 'W':
+              chr_sequences[0][j] = 'A';
+              chr_sequences[1][j] = 'T';
+            break;
+              
+            case 'S':
+              chr_sequences[0][j] = 'C';
+              chr_sequences[1][j] = 'G';
+            break;
+              
+            case 'K':
+              chr_sequences[0][j] = 'T';
+              chr_sequences[1][j] = 'G';
+              break;
+              
+            case 'M':
+              chr_sequences[0][j] = 'A';
+              chr_sequences[1][j] = 'C';
+              break;
+          }
+        }
+      }
+      
+      // Final pass to rid of any remaining nonstandard characters
+      
+      for(size_t chr_0=0; chr_0<ploidy; chr_0++) {
         
         // Remedy nonstandard characters to 'N'
         map<char,uint32_t> bad_char;
-        for (size_t j=0; j<this_sequence.size(); j++) {
-          if ( !strchr( "ATCGN.",  this_sequence[j] )) {
-            if (bad_char.count(this_sequence[j])) {
-              bad_char[this_sequence[j]]++;
+      
+        for (size_t j=0; j<chr_sequences[chr_0].size(); j++) {
+          if ( !strchr( "ATCGN.",  chr_sequences[chr_0][j] )) {
+            if (bad_char.count(chr_sequences[chr_0][j])) {
+              bad_char[chr_sequences[chr_0][j]]++;
             } else {
-              bad_char[this_sequence[j]] = 1;
+              bad_char[chr_sequences[chr_0][j]] = 1;
             }
-            this_sequence[j] = 'N';
+            chr_sequences[chr_0][j] = 'N';
           }
         }
+      }
+      
+      // Create VCF lines
+      // (We have to do this here so that IUPAC diploids are included)
+      if (ploidy>1) {
+        vcf_lines.clear();
         
-        (*this)[i].m_fasta_sequence.set_sequence(this_sequence, chr_0);
-        
+        for (size_t j=0; j<chr_sequences[0].size(); j++) {
+          
+          // Example unphased VCF line
+          // NC_001133  10000  .  A  G  .  .  .  GT  2/1
+
+          map<char,size_t> base_to_genotype_index;
+          vector<string> genotype_indices;
+          
+          for(size_t chr_0=0; chr_0<ploidy; chr_0++) {
+            
+            char on_base = chr_sequences[chr_0][j];
+            if (base_to_genotype_index.find(on_base) == base_to_genotype_index.end()) {
+              base_to_genotype_index[on_base] = base_to_genotype_index.size() + 1;
+            }
+            genotype_indices.push_back(to_string(base_to_genotype_index[on_base]));
+          }
+          
+          if (base_to_genotype_index.size() > 1) {
+            
+            char main_genotype;
+            vector<string> other_genotypes;
+            
+            for (map<char,size_t>::iterator it = base_to_genotype_index.begin(); it != base_to_genotype_index.end(); it++) {
+              if (it->second == 1) {
+                main_genotype = it->first;
+              } else {
+                other_genotypes.push_back(string(1, it->first));
+              }
+            }
+            
+            // construct the line
+            string line = (*this)[i].m_seq_id + "\t" + to_string(j+1) + "\t.\t";
+            line += string(1,main_genotype) + "\t" + join(other_genotypes,",");
+            line += "\t.\t.\t.\tGT\t" + join(genotype_indices,"/");
+            vcf_lines.push_back(line);
+          }
+          
+        }
+      }
+      
+      for(size_t chr_0=0; chr_0<ploidy; chr_0++) {
+        (*this)[i].m_fasta_sequence.set_sequence(chr_sequences[chr_0], chr_0);
+      }
+      
+      for(size_t chr_0=0; chr_0<ploidy; chr_0++) {
         // Found some bad characters...
         if (bad_char.size()) {
           string warning_string("Non-standard base characters found in sequence: " + (*this)[i].m_seq_id + ( ploidy >1  ? "(chromosome " + to_string(chr_0+1) + ")" : "" ) + "\n");
@@ -1444,14 +1550,11 @@ void cReferenceSequences::ReadVCF(const string& file_name)
   ifstream in(file_name.c_str());
   ASSERT(!in.fail(), "Could not open VCF file: " + file_name);
   
-  ASSERT(vcf_lines.size() == 0, "Attempt to load more than one VCF file. This is not supported. Please merge into one VCF file for input.");
-  
   string line;
   bool found_header(false);
   vector<string> header_items = split(line, "\t");
   size_t line_number = 0;
   while (getline(in, line)) {
-    vcf_lines.push_back(line);
     line_number++;
     if (line.find("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT") != string::npos) {
       found_header = true;
@@ -1466,7 +1569,6 @@ void cReferenceSequences::ReadVCF(const string& file_name)
   CHECK(header_items.size()==10, "Found more than one SAMPLE_ID column. Only the first column (" + header_items[9] + ") will be used.");
   
   while (getline(in, line)) {
-    vcf_lines.push_back(line);
     line_number++;
     vector<string> line_items = split(line, "\t");
 
@@ -1517,7 +1619,11 @@ void cReferenceSequences::ReadVCF(const string& file_name)
         ASSERT(genotype_items.size() == seq.get_ploidy(), "Number of genotype items (" + join(genotype_items, "/") + ") does not match ploidy (" + to_string(seq.get_ploidy()) + ")");
         
         for (size_t chr_0=0; chr_0!=genotype_items.size(); chr_0++) {
-          seq.m_fasta_sequence.replace_sequence_1(position_1, position_1, alleles[from_string<size_t>(genotype_items[chr_0])], chr_0);
+          size_t on_genotype = from_string<size_t>(genotype_items[chr_0]);
+          //cout << position_1 << " " << chr_0 << " " << on_genotype << " " << alleles[on_genotype-1] << endl;
+          ASSERT( (on_genotype>=1) && (on_genotype<=seq.get_ploidy()), "Genotype index [" + to_string(genotype_items[chr_0]) + "] is out of the range allowed for ploidy [1-" + to_string(seq.get_ploidy()) + "] of reference sequence [" + to_string(seq.m_seq_id) + "].")
+          
+          seq.m_fasta_sequence.replace_sequence_1(position_1, position_1, alleles[on_genotype-1], chr_0);
         }
       }
     }
@@ -1576,6 +1682,9 @@ void cReferenceSequences::WriteVCF(const string &file_name)
   
   (void) file_name;
   ofstream output(file_name);
+  output << "##fileformat=VCFv4.0" << endl;
+  output << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">" << endl;
+  output << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSAMPLE" << endl;
   
   for (vector<string>::iterator it=vcf_lines.begin(); it != vcf_lines.end(); it++) {
     output << *it << endl;
