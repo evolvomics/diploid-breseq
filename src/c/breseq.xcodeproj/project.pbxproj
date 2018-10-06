@@ -1,4 +1,4 @@
-src/c/breseq.xcodeproj/project.pbxproj// !$*UTF8*$!
+// !$*UTF8*$!
 {
 	archiveVersion = 1;
 	classes = {
@@ -745,7 +745,6 @@ src/c/breseq.xcodeproj/project.pbxproj// !$*UTF8*$!
 				LIBRARY_SEARCH_PATHS_QUOTED_FOR_TARGET_2 = "";
 				MACOSX_DEPLOYMENT_TARGET = 10.11;
 				ONLY_ACTIVE_ARCH = YES;
-				PREBINDING = NO;
 				PRODUCT_NAME = "diploid-breseq";
 				USER_HEADER_SEARCH_PATHS = "";
 			};
@@ -771,7 +770,6 @@ src/c/breseq.xcodeproj/project.pbxproj// !$*UTF8*$!
 				LIBRARY_SEARCH_PATHS_QUOTED_FOR_TARGET_2 = "";
 				MACOSX_DEPLOYMENT_TARGET = 10.11;
 				ONLY_ACTIVE_ARCH = NO;
-				PREBINDING = NO;
 				PRODUCT_NAME = "diploid-breseq";
 				USER_HEADER_SEARCH_PATHS = "";
 				ZERO_LINK = NO;
@@ -955,7 +953,6 @@ src/c/breseq.xcodeproj/project.pbxproj// !$*UTF8*$!
 				LIBRARY_SEARCH_PATHS_QUOTED_FOR_TARGET_2 = "";
 				MACOSX_DEPLOYMENT_TARGET = 10.11;
 				ONLY_ACTIVE_ARCH = YES;
-				PREBINDING = NO;
 				PRODUCT_NAME = "diploid-gdtools";
 				USER_HEADER_SEARCH_PATHS = "";
 			};
@@ -982,7 +979,6 @@ src/c/breseq.xcodeproj/project.pbxproj// !$*UTF8*$!
 				LIBRARY_SEARCH_PATHS_QUOTED_FOR_TARGET_2 = "";
 				MACOSX_DEPLOYMENT_TARGET = 10.11;
 				ONLY_ACTIVE_ARCH = NO;
-				PREBINDING = NO;
 				PRODUCT_NAME = "diploid-gdtools";
 				USER_HEADER_SEARCH_PATHS = "";
 				ZERO_LINK = NO;
