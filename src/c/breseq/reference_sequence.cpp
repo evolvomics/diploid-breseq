@@ -3487,8 +3487,10 @@ void cReferenceSequences::annotate_mutations(cGenomeDiff& gd, bool only_muts, bo
     if (verbose) cerr << "Annotating: " << mut << endl;
 
     // Add ploidy info
-    uint32_t ploidy = (*this)[mut["seq_id"]].get_ploidy();
-    mut["_ploidy"] = s(ploidy);
+    if (mut.count("seq_id")) {
+      uint32_t ploidy = (*this)[mut["seq_id"]].get_ploidy();
+      mut["_ploidy"] = s(ploidy);
+    }
     
     if (only_muts && !(mut.is_mutation())) continue;
     
