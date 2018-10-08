@@ -351,6 +351,8 @@ namespace breseq
     uint32_t consensus_minimum_total_coverage;                    // Default = 0
     uint32_t consensus_minimum_variant_coverage_each_strand;      // Default = 0
     uint32_t consensus_minimum_total_coverage_each_strand;        // Default = 0
+    uint32_t consensus_reject_indel_homopolymer_length;        // Default = 0 (OFF)
+    uint32_t consensus_reject_surrounding_homopolymer_length;  // Default = 0 (OFF)
 
     double consensus_frequency_cutoff;                            // Default = 0.8
     
@@ -608,7 +610,7 @@ namespace breseq
       // 3rd choice: build it from the executable path, if we found one
       if (global_program_data_path.length() == 0) {
         ASSERT(global_bin_path.length() != 0, string("Failed to automatically detect the location of this executable. To continue, set the BRESEQ_DATA_PATH environmental variable to the 'share/") + PACKAGE_NAME + " =' directory of your installation. For example, to '/path/to/executable/../share/'" + PACKAGE_NAME + "'");
-      
+        
         global_program_data_path = global_bin_path + "/" + DATADIR;
       }
       
@@ -623,7 +625,7 @@ namespace breseq
       //cout << "Global bin path: " + global_bin_path << endl;
       //cout << "Global program data path: " + global_program_data_path << endl;
     }
-    
+
     //! Utility functions for getting paths
     static string get_bin_path()
     {
