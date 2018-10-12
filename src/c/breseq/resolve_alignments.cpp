@@ -648,8 +648,6 @@ void resolve_alignments(
   
   // Write the genome diff file
 	gd.write(settings.jc_genome_diff_file_name);
-  settings.track_intermediate_file(settings.output_done_file_name, settings.jc_genome_diff_file_name);
-
 }
     
 void load_junction_alignments(

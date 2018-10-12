@@ -616,18 +616,21 @@ void test_RA_evidence(
     
     bool delete_entry = false;
 
-    // Haploid case
+
+
+    // At this point, both consensus and polymorphism quality may be > 0,
+    // we see if either is below the significance + frequency cutoff first.
+
+    if (!ra.entry_exists(REF_BASE)) {
+      ERROR("Expected field 'ref_base' in evidence item\n" + ra.as_string());
+    }
+    if (!ra.entry_exists(CONSENSUS_SCORE)) {
+      ERROR("Expected field 'consensus_score' in evidence item\n" + ra.as_string());
+    }
+    
+    // Haploid case has these in both consensus and polymorphism mode
     if (ref_seq_info[ref_seq_info.seq_id_to_index(ra[SEQ_ID])].get_ploidy() == 1) {
-
-      // At this point, both consensus and polymorphism quality may be > 0,
-      // we see if either is below the significance + frequency cutoff first.
-
-      if (!ra.entry_exists(REF_BASE)) {
-        ERROR("Expected field 'ref_base' in evidence item\n" + ra.as_string());
-      }
-      if (!ra.entry_exists(CONSENSUS_SCORE)) {
-        ERROR("Expected field 'consensus_score' in evidence item\n" + ra.as_string());
-      }
+    
       if (!ra.entry_exists(POLYMORPHISM_SCORE)) {
         ERROR("Expected field 'polymorphism_score' in evidence item\n" + ra.as_string());
       }
@@ -640,9 +643,9 @@ void test_RA_evidence(
       } else {
         delete_entry = test_RA_evidence_CONSENSUS_mode(ra, ref_seq_info, settings);
       }
-      
     } else {
-      // Multiploid case
+      // Multiploid case!
+      rejected_RA_indel_homopolymer(ra, ref_seq_info, settings.consensus_reject_indel_homopolymer_length, settings.consensus_reject_surrounding_homopolymer_length, false);
     }
 
     // User evidence items should be treated normally (to define polymorphism vs. consensus predictions)
@@ -1117,7 +1120,6 @@ void identify_mutations_pileup::pileup_callback(const pileup& p) {
       mut[INSERT_POSITION] = to_string<uint32_t>(insert_count);
       // Genotype quality is for the top called genotype
       mut[CONSENSUS_SCORE] = formatted_double(consensus_bonferroni_score, kMutationScorePrecision).to_string();
-      mut[POLYMORPHISM_SCORE] = formatted_double(polymorphism_bonferroni_score, kMutationScorePrecision).to_string();
       
       //## Specific initializations for polymorphisms. Must take precedence.
 
@@ -1136,8 +1138,8 @@ void identify_mutations_pileup::pileup_callback(const pileup& p) {
         if (mut[REF_BASE] == mut[MAJOR_BASE]) {
           variant_frequency = 1.0 - variant_frequency;
         }
+        mut[POLYMORPHISM_SCORE] = formatted_double(polymorphism_bonferroni_score, kMutationScorePrecision).to_string();
         mut[POLYMORPHISM_FREQUENCY] = formatted_double(variant_frequency, _polymorphism_precision_places, true).to_string();
-
         
         // Add line to R input file if we are only a polymorphism
         
