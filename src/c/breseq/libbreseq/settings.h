@@ -623,7 +623,7 @@ namespace breseq
         if (global_program_data_path[global_program_data_path.length()-1] == '/') {
           global_program_data_path.erase(global_program_data_path.length()-1, 1);
         }
-      
+
         string test_file = global_program_data_path + "/coverage_distribution.r";
         ASSERT(file_exists(test_file.c_str()), "Could not find expected R scripts inside of data path set relative to executable: " + global_program_data_path + "\nPlease, see the installation instructions in the HTM documentation.");
       }
