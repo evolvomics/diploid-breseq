@@ -81,6 +81,7 @@ namespace breseq {
   const char* NEW_COV="new_cov";
   
   // new fields
+  const char* REF_SEQ="ref_seq";
   const char* MAJOR_BASE="major_base";
   const char* MINOR_BASE="minor_base";
   const char* MAJOR_COV="major_cov";
@@ -443,7 +444,7 @@ namespace breseq {
       
       if (variable_type == kDiffEntryFieldVariableType_BaseSequence) {
         if (!is_base_sequence(value))
-          parse_errors.add_line_error(from_string<uint32_t>((*this)["_line_number"]), this->as_string(), "Expected base sequence for field containing only characters 'ATCGN' for field #" + to_string<uint32_t>(field_count) + " (" + key +  "): [" + key + "] instead of [" + value + "]." , true);
+          parse_errors.add_line_error(from_string<uint32_t>((*this)["_line_number"]), this->as_string(), "Expected base sequence for field containing only characters 'ATCGN/' for field #" + to_string<uint32_t>(field_count) + " (" + key +  "): [" + key + "] instead of [" + value + "]." , true);
         continue;
       }
       

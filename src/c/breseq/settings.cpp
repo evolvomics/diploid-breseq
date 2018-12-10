@@ -245,6 +245,17 @@ namespace breseq
     ;
     
     options.addUsage("", ADVANCED_OPTION);
+    options.addUsage("Read Alignment (RA) Evidence Options", ADVANCED_OPTION);
+    options
+    ("heterozygote-prior", "The prior probability that a site is heterozygous for the Bayesian genotype caller", "1E-6", ADVANCED_OPTION)
+    ("mutation-prior", "The prior probability that a homozygous site is not the reference allele for the Bayesian genotype caller", "0.8", ADVANCED_OPTION)
+    ;
+    options.addUsage("For the haploid genome case, the priors are set to 1-(mutation-prior) for the reference base and (mutation-prior)/4 to each of the four other states (gaps are included as a base state). For the diploid or multiploid genome case, the priors are set to 1-(mutation-prior)-(heterozygote-prior) for the reference base and (mutation-prior)/4 to each of the four other states (gaps are included as a base state) and to heterozygote-prior/n for the n heterozygous states", ADVANCED_OPTION);
+
+    double genotype_caller_heterozygote_prior;
+    double genotype_caller_non_reference_prior;
+    
+    options.addUsage("", ADVANCED_OPTION);
     options.addUsage("Consensus Read Alignment (RA) Evidence Options", ADVANCED_OPTION);
     options
     ("consensus-score-cutoff", "Log10 E-value cutoff for consensus base substitutions and small indels (DEFAULT = 10)", "", ADVANCED_OPTION)
@@ -544,6 +555,10 @@ namespace breseq
     
     if (options.count("junction-indel-split-length"))
       this->preprocess_junction_min_indel_split_length = from_string<int32_t>(options["junction-indel-split-length"]);
+    
+    this->genotype_caller_heterozygote_prior = from_string<double>(options["heterozygote-prior"]);
+    this->genotype_caller_mutation_prior = from_string<double>(options["mutation-prior"]);
+    ASSERT(genotype_caller_mutation_prior == 0.8, "Currently you cannot change the mutation prior. Use a different score-cutoff to achieve the same effect.");
     
     if (options.count("consensus-score-cutoff"))
       this->mutation_log10_e_value_cutoff = from_string<double>(options["consensus-score-cutoff"]);

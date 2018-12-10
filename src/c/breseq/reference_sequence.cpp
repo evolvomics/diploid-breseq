@@ -26,6 +26,11 @@ using namespace std;
 
 namespace breseq {
   
+  const string genotype_separator = "/";
+  const string html_genotype_separator = "<br>";
+  
+  const string cReferenceSequences::multiple_separator = "|";
+  const string cReferenceSequences::html_multiple_separator = ";<br>";
   
   const string cReferenceSequences::intergenic_separator = "/";
   const string cReferenceSequences::html_intergenic_separator = "/";
@@ -33,8 +38,6 @@ namespace breseq {
   const string cReferenceSequences::html_gene_list_separator = ",";
   const string cReferenceSequences::no_gene_name = "–"; //en-dash
   const string cReferenceSequences::gene_range_separator = "–"; //en-dash
-  const string cReferenceSequences::multiple_separator = "|";
-  const string cReferenceSequences::html_multiple_separator = "<br>";
   const string cReferenceSequences::gene_strand_reverse_char = "<";
   const string cReferenceSequences::gene_strand_forward_char = ">";
   
@@ -2857,6 +2860,8 @@ void cReferenceSequences::annotate_1_mutation_in_genes(cDiffEntry& mut, vector<c
   vector<string> locus_tags_overlapping_list;
   bool codon_position_is_indeterminate_in_at_least_one = false;
   
+  /// It can be within multiple genes, in which case we need to annotate
+  /// the change it causes in each reading frame
   for (vector<cFeatureLocation*>::iterator flit = within_gene_locs.begin(); flit != within_gene_locs.end(); flit++) {
     
     // Per gene values
@@ -2866,10 +2871,7 @@ void cReferenceSequences::annotate_1_mutation_in_genes(cDiffEntry& mut, vector<c
     string gene_position;
     string gene_strand;
     string snp_type;
-    
-    /// It can be within multiple genes, in which case we need to annotate
-    /// the change it causes in each reading frame UGH! YUCKY!
-    /// FOR NOW: just take the FIRST of the within genes...
+
     cFeatureLocation* gene_loc = *flit;
     cGeneFeature gene = (cGeneFeature)(*(gene_loc->get_feature()));
     
@@ -2899,9 +2901,9 @@ void cReferenceSequences::annotate_1_mutation_in_genes(cDiffEntry& mut, vector<c
     string codon_position_is_indeterminate("0");
     string codon_position("NA");
     string codon_number("NA");
-    string aa_position("NA");
     string codon_ref_seq("NA");
     string codon_new_seq("NA");
+    string aa_position("NA");
     string aa_ref_seq("NA");
     string aa_new_seq("NA");
     string transl_table("NA");
@@ -2936,8 +2938,8 @@ void cReferenceSequences::annotate_1_mutation_in_genes(cDiffEntry& mut, vector<c
       if (mut._type == RA)  {
         string ra_seq_id = mut[SEQ_ID];
         int32_t ra_position = from_string<int32_t>(mut[POSITION]);
-        mut["ref_seq"] = this->get_sequence_1(ra_seq_id, ra_position, ra_position);
-        mut[NEW_SEQ] = ( (mut[MAJOR_BASE] == mut["ref_seq"]) ? mut[MINOR_BASE] : mut[MAJOR_BASE]);
+        mut[REF_SEQ] = this->get_sequence_1(ra_seq_id, ra_position, ra_position);
+        mut[NEW_SEQ] = mut[NEW_BASE];
       }
       
       // SNP and RA entries make it here
@@ -2946,9 +2948,9 @@ void cReferenceSequences::annotate_1_mutation_in_genes(cDiffEntry& mut, vector<c
       // indeterminate codon if necessary
       
       // The position within a codon... indexed to start at 0.
-      string gene_nt_sequence = gene.get_nucleotide_sequence((*this)[mut["seq_id"]]);
+      string gene_nt_sequence = gene.get_nucleotide_sequence((*this)[mut[SEQ_ID]]);
       
-      // The position within a codon... indexed to start at 0.
+      // If the gene has an indeterminate start, we can figure out the from from the end
       size_t indeterminate_codon_pos_offset_0 = 0;
       
       // Add padding to put us in-frame if we have an indeterminate start
@@ -2960,6 +2962,8 @@ void cReferenceSequences::annotate_1_mutation_in_genes(cDiffEntry& mut, vector<c
         codon_position_is_indeterminate = "1";
         codon_position_is_indeterminate_in_at_least_one = true;
       }
+      
+      // Otherwise if the end is determinate, we may need to pad this codon if it is at the end
       if (gene.end_is_indeterminate()) {
         gene_nt_sequence += repeat_char('N', gene_nt_sequence.length() % 3);
       }
@@ -2979,28 +2983,65 @@ void cReferenceSequences::annotate_1_mutation_in_genes(cDiffEntry& mut, vector<c
       codon_ref_seq = gene_nt_sequence.substr((mutated_codon_number_1-1)*3, 3);
       
       // Save what we know so far
+      transl_table = to_string(gene.translation_table);
       codon_position = to_string<int32_t>(mutated_codon_pos_1); // 1-indexed
       codon_number = to_string<int32_t>(mutated_codon_number_1);
       aa_position = to_string<int32_t>(mutated_codon_number_1);
       
       aa_ref_seq = translate_codon(codon_ref_seq, gene.translation_table, ( gene.start_is_indeterminate() && (mutated_codon_number_1 == 1) ) ? 2 : mutated_codon_number_1, gene.get_locus_tag());
+
       
-      // Generate mutated sequence
-      codon_new_seq = codon_ref_seq;
-      //#remember to revcom the change if gene is on opposite strand
-      codon_new_seq[mutated_codon_pos_1 - 1] = (mutated_strand == 1) ? mut[NEW_SEQ][0] : reverse_complement(mut[NEW_SEQ])[0];
-      aa_new_seq = translate_codon(codon_new_seq, gene.translation_table, ( gene.start_is_indeterminate() && (mutated_codon_number_1 == 1) ) ? 2 : mutated_codon_number_1, gene.get_locus_tag());
-      transl_table = to_string(gene.translation_table);
+      vector<string> ref_genotype_list = printable_genotype_to_list(mut[REF_SEQ]);
+      vector<string> genotype_list = printable_genotype_to_list(mut[NEW_SEQ]);
       
-      if ((aa_ref_seq != "*") && (aa_new_seq == "*"))
-        snp_type = "nonsense";
-      else if (aa_ref_seq != aa_new_seq)
-        snp_type = "nonsynonymous";
-      else
-        snp_type = "synonymous";
+      vector<string> codon_ref_seq_genotype_list;
+      vector<string> codon_new_seq_genotype_list;
+      vector<string> aa_ref_seq_genotype_list;
+      vector<string> aa_new_seq_genotype_list;
+      vector<string> snp_type_genotype_list;
       
+      // Generate mutated sequence, loop this per allele in a multiploid genome
+      for(size_t a=0; a<genotype_list.size(); a++) {
+        
+        string this_codon_new_seq;
+        string this_aa_new_seq;
+        string this_snp_type;
+
+        const string& this_ref_seq = ref_genotype_list[a];
+        const string& this_new_seq = genotype_list[a];
+        ASSERT(this_new_seq.length()==1, "Expected string of length 1 for genotype.");
+
+        this_codon_new_seq = codon_ref_seq;
+
+        //#remember to revcom the change if gene is on opposite strand
+        this_codon_new_seq[mutated_codon_pos_1 - 1] = (mutated_strand == 1) ? this_new_seq[0] : reverse_complement(this_new_seq[0]);
+        
+        this_aa_new_seq = translate_codon(this_codon_new_seq, gene.translation_table, ( gene.start_is_indeterminate() && (mutated_codon_number_1 == 1) ) ? 2 : mutated_codon_number_1, gene.get_locus_tag());
+        
+        if (this_ref_seq == this_new_seq)
+          this_snp_type = "unmutated";
+        else if ((aa_ref_seq != "*") && (this_aa_new_seq == "*"))
+          this_snp_type = "nonsense";
+        else if (aa_ref_seq != this_aa_new_seq)
+          this_snp_type = "nonsynonymous";
+        else
+          this_snp_type = "synonymous";
+        
+        codon_ref_seq_genotype_list.push_back(codon_ref_seq);
+        codon_new_seq_genotype_list.push_back(this_codon_new_seq);
+        aa_ref_seq_genotype_list.push_back(aa_ref_seq);
+        aa_new_seq_genotype_list.push_back(this_aa_new_seq);
+        snp_type_genotype_list.push_back(this_snp_type);
+      }
+      
+      codon_ref_seq = list_to_printable_genotype(codon_ref_seq_genotype_list);
+      codon_new_seq = list_to_printable_genotype(codon_new_seq_genotype_list);
+      aa_ref_seq = list_to_printable_genotype(aa_ref_seq_genotype_list);
+      aa_new_seq = list_to_printable_genotype(aa_new_seq_genotype_list);
+      snp_type = list_to_printable_genotype(snp_type_genotype_list);
     }
     
+
     codon_position_is_indeterminate_list.push_back(codon_position_is_indeterminate);
     codon_position_list.push_back(codon_position);
     codon_number_list.push_back(codon_number);
@@ -3062,6 +3103,7 @@ void cReferenceSequences::annotate_1_mutation_in_genes(cDiffEntry& mut, vector<c
     mut["genes_overlapping"] = join(genes_overlapping_list, ",");
   if (locus_tags_overlapping_list.size() > 0)
     mut["locus_tags_overlapping"] = join(locus_tags_overlapping_list, ",");
+  
 }
   
 void cReferenceSequences::annotate_1_mutation(cDiffEntry& mut, uint32_t start, uint32_t end, bool repeat_override, bool ignore_pseudogenes)
@@ -3395,7 +3437,13 @@ void cReferenceSequences::categorize_1_mutation(cDiffEntry& mut, int32_t large_s
   if (mut._type == SNP) {
     
     ASSERT(mut.entry_exists("snp_type"), "Attempt to classify SNP before annotating its snp type");
-    mut["mutation_category"] = "snp_" + mut["snp_type"];
+    
+    vector<string> snp_type_genotype_list = printable_genotype_to_list(mut["snp_type"]);
+    vector<string> mutation_category_list;
+    for (size_t a=0; a<snp_type_genotype_list.size(); a++) {
+      mutation_category_list.push_back("snp_" + snp_type_genotype_list[a]);
+    }
+    mut["mutation_category"] = list_to_printable_genotype(mutation_category_list);
     
   } else if (mut._type == DEL) {
     
@@ -3497,7 +3545,7 @@ void cReferenceSequences::annotate_mutations(cGenomeDiff& gd, bool only_muts, bo
     switch (mut._type)
     {
       case SNP:{
-        mut["_ref_seq"] = internal_to_printable_genotype(get_genotype_1(mut["seq_id"], from_string<uint32_t>(mut["position"])));
+        mut[REF_SEQ] = internal_to_printable_genotype(get_genotype_1(mut["seq_id"], from_string<uint32_t>(mut["position"])));
         annotate_1_mutation(mut, mut.get_reference_coordinate_start().get_position(), mut.get_reference_coordinate_end().get_position(), false, ignore_pseudogenes);
       } break;
         
@@ -3634,45 +3682,70 @@ void cReferenceSequences::annotate_mutations(cGenomeDiff& gd, bool only_muts, bo
             if (   ((*snp_muts[on_key][i]).entry_exists(FREQUENCY) && ( from_string<double>((*snp_muts[on_key][i])[FREQUENCY]) != 1.0 ))
                 || ((*snp_muts[on_key][j]).entry_exists(FREQUENCY) && ( from_string<double>((*snp_muts[on_key][j])[FREQUENCY]) != 1.0 )) )
             {
-              
-              
-              // Create or fill the field marking multiple SNPs in the same codon
-              if (!(*snp_muts[on_key][i]).entry_exists("multiple_polymorphic_SNPs_in_same_codon")) {
-                vector<string> empty(codon_number_list_i.size(), "0");
-                (*snp_muts[on_key][i])["multiple_polymorphic_SNPs_in_same_codon"] = join(empty, multiple_separator);
-              } else {
-                // split
-                vector<string> current = split((*snp_muts[on_key][i])["multiple_polymorphic_SNPs_in_same_codon"], multiple_separator);
-                current[ii] = "1";
-                (*snp_muts[on_key][i])["multiple_polymorphic_SNPs_in_same_codon"] = join(current, multiple_separator);
-              }
-              
-              if (!(*snp_muts[on_key][j]).entry_exists("multiple_polymorphic_SNPs_in_same_codon")) {
-                vector<string> empty(codon_number_list_j.size(), "0");
-                (*snp_muts[on_key][j])["multiple_polymorphic_SNPs_in_same_codon"] = join(empty, multiple_separator);
-              } else {
-                // split
-                vector<string> current = split((*snp_muts[on_key][j])["multiple_polymorphic_SNPs_in_same_codon"], multiple_separator);
-                current[jj] = "1";
-                (*snp_muts[on_key][j])["multiple_polymorphic_SNPs_in_same_codon"] = join(current, multiple_separator);
-              }
               continue;
             }
+              
+            // Create or fill the field marking multiple SNPs in the same codon
+            if (!(*snp_muts[on_key][i]).entry_exists("multiple_polymorphic_SNPs_in_same_codon")) {
+              vector<string> empty(codon_number_list_i.size(), "0");
+              (*snp_muts[on_key][i])["multiple_polymorphic_SNPs_in_same_codon"] = join(empty, multiple_separator);
+            } else {
+              // split
+              vector<string> current = split((*snp_muts[on_key][i])["multiple_polymorphic_SNPs_in_same_codon"], multiple_separator);
+              current[ii] = "1";
+              (*snp_muts[on_key][i])["multiple_polymorphic_SNPs_in_same_codon"] = join(current, multiple_separator);
+            }
+            
+            if (!(*snp_muts[on_key][j]).entry_exists("multiple_polymorphic_SNPs_in_same_codon")) {
+              vector<string> empty(codon_number_list_j.size(), "0");
+              (*snp_muts[on_key][j])["multiple_polymorphic_SNPs_in_same_codon"] = join(empty, multiple_separator);
+            } else {
+              // split
+              vector<string> current = split((*snp_muts[on_key][j])["multiple_polymorphic_SNPs_in_same_codon"], multiple_separator);
+              current[jj] = "1";
+              (*snp_muts[on_key][j])["multiple_polymorphic_SNPs_in_same_codon"] = join(current, multiple_separator);
+            }
+
             
             vector<string> codon_new_seq_list_i = split((*snp_muts[on_key][i])["codon_new_seq"], multiple_separator);
-            string new_codon = codon_new_seq_list_i[ii];
-            char new_char = (*snp_muts[on_key][j])["new_seq"][0];
-            if ((*snp_muts[on_key][i])["gene_strand"] == gene_strand_reverse_char) new_char = reverse_complement(new_char);
-            new_codon[j_codon_position - 1] = new_char;
-            
             vector<string> codon_new_seq_list_j = split((*snp_muts[on_key][j])["codon_new_seq"], multiple_separator);
             vector<string> aa_new_seq_list_i = split((*snp_muts[on_key][i])["aa_new_seq"], multiple_separator);
             vector<string> aa_new_seq_list_j = split((*snp_muts[on_key][j])["aa_new_seq"], multiple_separator);
+            vector<string> gene_strand_list_j = split((*snp_muts[on_key][j])["gene_strand"], multiple_separator);
+            vector<string> translation_table_list_i = split((*snp_muts[on_key][i])["transl_table"], multiple_separator);
+            vector<string> aa_position_i = split((*snp_muts[on_key][i])["aa_position"], multiple_separator);
 
-            codon_new_seq_list_i[ii] = new_codon;
-            codon_new_seq_list_j[jj] = new_codon;
-            aa_new_seq_list_i[ii] =  translate_codon(new_codon, from_string((*snp_muts[on_key][i])["transl_table"]), from_string((*snp_muts[on_key][i])["aa_position"]));
-            aa_new_seq_list_j[jj] =  translate_codon(new_codon, from_string((*snp_muts[on_key][j])["transl_table"]), from_string((*snp_muts[on_key][j])["aa_position"]));
+            
+            vector<string> codon_new_seq_list_i_genotype_list = printable_genotype_to_list(codon_new_seq_list_i[ii]);
+            vector<string> codon_new_seq_list_j_genotype_list = printable_genotype_to_list(codon_new_seq_list_j[jj]);
+            vector<string> aa_new_seq_list_i_genotype_list = printable_genotype_to_list(aa_new_seq_list_i[ii]);
+            vector<string> aa_new_seq_list_j_genotype_list = printable_genotype_to_list(aa_new_seq_list_j[jj]);
+
+            vector<string> new_char_genotype_list = printable_genotype_to_list((*snp_muts[on_key][j])["new_seq"]);
+
+            for (size_t a=0; a<new_char_genotype_list.size(); a++) {
+
+              //// HERE is where we need a new loop
+              string new_codon = codon_new_seq_list_i_genotype_list[a];
+              char new_char = new_char_genotype_list[a][0];
+              if (gene_strand_list_j[jj] == gene_strand_reverse_char) new_char = reverse_complement(new_char);
+              new_codon[j_codon_position - 1] = new_char;
+              
+              codon_new_seq_list_i_genotype_list[a] = new_codon;
+              codon_new_seq_list_j_genotype_list[a] = new_codon;
+              aa_new_seq_list_i_genotype_list[a] =  translate_codon(new_codon, from_string(translation_table_list_i[ii]), from_string(aa_position_i[ii]));
+              aa_new_seq_list_j_genotype_list[a] =  translate_codon(new_codon, from_string(translation_table_list_i[ii]), from_string(aa_position_i[ii]));
+              
+            }
+            
+            // Rejoin genotype
+            
+            codon_new_seq_list_i[ii] = list_to_printable_genotype(codon_new_seq_list_i_genotype_list);
+            codon_new_seq_list_j[jj] = list_to_printable_genotype(codon_new_seq_list_j_genotype_list);
+            aa_new_seq_list_i[ii] = list_to_printable_genotype(aa_new_seq_list_i_genotype_list);
+            aa_new_seq_list_j[jj] = list_to_printable_genotype(aa_new_seq_list_j_genotype_list);
+            
+            // Rejoin multiple genes
             
             (*snp_muts[on_key][i])["codon_new_seq"] = join(codon_new_seq_list_i, multiple_separator);
             (*snp_muts[on_key][j])["codon_new_seq"] = join(codon_new_seq_list_j, multiple_separator);

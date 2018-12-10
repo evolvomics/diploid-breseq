@@ -19,7 +19,7 @@
 #                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 AC_PREREQ([2.65])
-AC_INIT([diploid-breseq], [0.33.3], [jeffrey.e.barrick@gmail.com], [diploid-breseq], [http://evolvomics.com])
+AC_INIT([diploid-breseq], [0.33.1_diploid_0.1.0], [jeffrey.e.barrick@gmail.com], [diploid-breseq], [http://evolvomics.com])
 AC_CONFIG_AUX_DIR(aux_build)
 AC_CONFIG_MACRO_DIR([aux_build/m4])
 AC_CONFIG_HEADERS([aux_build/config.h])

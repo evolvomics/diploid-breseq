@@ -537,6 +537,8 @@ namespace breseq{
     bool targeted_sequencing;
     bool print_mutation_identification_per_position_file;
     double mutation_log10_e_value_cutoff;
+    double genotype_caller_heterozygote_prior;
+    double genotype_caller_mutation_prior;
     uint32_t consensus_minimum_variant_coverage_each_strand;
     uint32_t consensus_minimum_total_coverage_each_strand;
     uint32_t consensus_minimum_variant_coverage;

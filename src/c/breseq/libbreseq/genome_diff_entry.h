@@ -93,6 +93,7 @@ namespace breseq {
   extern const char* NEW_COV;
   
   // new fields
+  extern const char* REF_SEQ;
   extern const char* MAJOR_BASE;
   extern const char* MINOR_BASE;
   extern const char* MAJOR_COV;

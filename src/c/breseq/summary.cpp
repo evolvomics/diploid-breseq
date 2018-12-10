@@ -498,6 +498,8 @@ PublicOptionsSummary::PublicOptionsSummary(const Settings &t)
   targeted_sequencing = t.targeted_sequencing;
   print_mutation_identification_per_position_file = t.print_mutation_identification_per_position_file;
   mutation_log10_e_value_cutoff = t.mutation_log10_e_value_cutoff;
+  genotype_caller_heterozygote_prior = t.genotype_caller_heterozygote_prior;
+  genotype_caller_mutation_prior = t.genotype_caller_mutation_prior;
   consensus_minimum_variant_coverage_each_strand = t.consensus_minimum_variant_coverage_each_strand;
   consensus_minimum_total_coverage_each_strand = t.consensus_minimum_total_coverage_each_strand;
   consensus_minimum_variant_coverage = t.consensus_minimum_variant_coverage;
@@ -804,6 +806,8 @@ void to_json(json& j, const PublicOptionsSummary& s)
       {"targeted_sequencing", s.targeted_sequencing},
       {"print_mutation_identification_per_position_file", s.print_mutation_identification_per_position_file},
       {"mutation_log10_e_value_cutoff", s.mutation_log10_e_value_cutoff},
+      {"genotype_caller_heterozygote_prior", s.genotype_caller_heterozygote_prior},
+      {"genotype_caller_mutation_prior", s.genotype_caller_mutation_prior},
       {"consensus_minimum_variant_coverage_each_strand", s.consensus_minimum_variant_coverage_each_strand},
       {"consensus_minimum_total_coverage_each_strand", s.consensus_minimum_total_coverage_each_strand},
       {"consensus_minimum_variant_coverage", s.consensus_minimum_variant_coverage},

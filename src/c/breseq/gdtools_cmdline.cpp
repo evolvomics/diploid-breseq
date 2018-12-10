@@ -1058,6 +1058,7 @@ int do_annotate(int argc, char* argv[])
   options("help,h", "Display detailed help message", TAKES_NO_ARGUMENT);
 	options("output,o", "Path to output file with added mutation data. (DEFAULT: output.*");
 	options("reference,r", "File containing reference sequences in GenBank, GFF3, or FASTA format. Option may be provided multiple times for multiple files (REQUIRED)");
+	options("ploidy,y", "Ploidy of reference sequences. If one value is supplied, then it is used for all reference sequences. If this option is supplied multiple times (ex: -y 2 -y 1 -y 2), then each entry applies to one reference file in input order.", NULL, ADVANCED_OPTION);
 	options("format,f", "Type of output file to generate. See options below", "HTML");
 	options("add-html-fields,a", "Add formatted fields that are used for generating HTML output. Only applicable to GD and JSON output formats", TAKES_NO_ARGUMENT);
 	options("ignore-pseudogenes", "Treat pseudogenes as normal genes for calling AA changes", TAKES_NO_ARGUMENT);
@@ -1139,10 +1140,13 @@ int do_annotate(int argc, char* argv[])
 	ASSERT((output_format != "PHYLIP") || (compare_mode), "You must provide more than one input GD file in PHYLIP mode.");
 	
 	// Load reference files
+	
+	vector<string> ploidy;
+	if (options.count("ploidy")) ploidy = from_string<vector<string> >(options["ploidy"]);
 	vector<string> reference_file_names = from_string<vector<string> >(options["reference"]);
 	uout("Reading input reference sequence files") << reference_file_names << endl;
 	cReferenceSequences ref_seq_info;
-	ref_seq_info.LoadFiles(reference_file_names);
+	ref_seq_info.LoadFiles(reference_file_names, &ploidy);
 	
 	cGenomeDiff gd;
 	vector<cGenomeDiff> gd_list;

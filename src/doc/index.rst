@@ -18,6 +18,7 @@ Contents:
    Test Drive <test_drive>
    Methods <methods>   
    Output <output>
+   Multiploid Extension <diploid>   
    References <references>
    Acknowledgments <acknowledgments>
 

@@ -159,6 +159,7 @@ string header_style_string()
   
   ss << ".mutation_in_codon {color:red; text-decoration : underline;}"     << endl;
   
+  ss << ".snp_type_unmutated{color:gray;}" << endl;
   ss << ".snp_type_synonymous{color:green;}" << endl;
   ss << ".snp_type_nonsynonymous{color:blue;}" << endl;
   ss << ".snp_type_nonsense{color:red;}" << endl;
@@ -1054,7 +1055,11 @@ string formatted_mutation_annotation(const cDiffEntry& mut)
   if (mut.entry_exists("snp_type")) {
     snp_type_list = split(mut.get("snp_type"), cReferenceSequences::multiple_separator);
     for (vector<string>::iterator i=snp_type_list.begin(); i!=snp_type_list.end(); i++) {
-      coding_SNP = coding_SNP || (*i == "nonsynonymous") || (*i== "synonymous") || (*i== "nonsense");
+      vector<string> snp_type_genotype_list = printable_genotype_to_list(*i);
+      for (size_t a=0; a<snp_type_genotype_list.size(); a++) {
+        string& v = snp_type_genotype_list[a];
+        coding_SNP = coding_SNP || (v == "nonsynonymous") || (v == "synonymous") || (v == "nonsense");
+      }
     }
   }
   
@@ -1094,29 +1099,41 @@ string formatted_mutation_annotation(const cDiffEntry& mut)
     for (size_t i=0; i<snp_type_list.size(); i++) {
       
       if (i>0) s+= cReferenceSequences::html_multiple_separator;
+
+      vector<string> snp_type_genotype_list = printable_genotype_to_list(snp_type_list[i]);
+      vector<string> aa_ref_seq_genotype_list = printable_genotype_to_list(aa_ref_seq_list[i]);
+      vector<string> aa_new_seq_genotype_list = printable_genotype_to_list(aa_new_seq_list[i]);
+      vector<string> codon_ref_seq_genotype_list = printable_genotype_to_list(codon_ref_seq_list[i]);
+      vector<string> codon_new_seq_genotype_list = printable_genotype_to_list(codon_new_seq_list[i]);
       
-      if  ( (snp_type_list[i] == "nonsynonymous") || (snp_type_list[i] == "synonymous") || (snp_type_list[i] == "nonsense") ) {
-      
-      s += font("class=\"snp_type_" + snp_type_list[i] + "\"", aa_ref_seq_list[i] + aa_position_list[i] + aa_new_seq_list[i]);
-      
-      
-      string codon_ref_seq = to_underline_red_codon(codon_ref_seq_list[i], codon_position_list[i]);
-      string codon_new_seq = to_underline_red_codon(codon_new_seq_list[i], codon_position_list[i]);
-      s+= "&nbsp;(" + codon_ref_seq + "&rarr;" + codon_new_seq + ")&nbsp;";
-      
-      // Dagger for initiation codons
-      if (codon_number_list[i] == "1")
-        s+= "&dagger;";
-      
-      // Double dagger for multiple SNPs in same codon
-      if (multiple_polymorphic_SNPs_in_same_codon_list.size() && (multiple_polymorphic_SNPs_in_same_codon_list[i] == "1"))
-        s+= "&Dagger;";
-      
-      if (codon_position_is_indeterminate_list.size() && (codon_position_is_indeterminate_list[i] == "1"))
-        s+= "&ordm;";
-      } else {
-        // Noncoding
-        s+= nonbreaking(gene_position_list[i]);
+      for (size_t j=0; j<snp_type_genotype_list.size(); j++) {
+
+        if (j>0) s+= html_genotype_separator;
+
+        string& this_snp_type = snp_type_genotype_list[j];
+        if  ( (this_snp_type == "unmutated") || (this_snp_type == "nonsynonymous") || (this_snp_type == "synonymous") || (this_snp_type == "nonsense") ) {
+        
+        s += font("class=\"snp_type_" + this_snp_type + "\"", aa_ref_seq_genotype_list[j] + aa_position_list[i] + aa_new_seq_genotype_list[j]);
+        
+        
+        string codon_ref_seq = to_underline_red_codon(codon_ref_seq_genotype_list[j], codon_position_list[i]);
+        string codon_new_seq = to_underline_red_codon(codon_new_seq_genotype_list[j], codon_position_list[i]);
+        s+= "&nbsp;(" + codon_ref_seq + "&rarr;" + codon_new_seq + ")&nbsp;";
+        
+        // Dagger for initiation codons
+        if (codon_number_list[i] == "1")
+          s+= "&dagger;";
+        
+        // Double dagger for multiple SNPs in same codon
+        if (multiple_polymorphic_SNPs_in_same_codon_list.size() && (multiple_polymorphic_SNPs_in_same_codon_list[i] == "1"))
+          s+= "&Dagger;";
+        
+        if (codon_position_is_indeterminate_list.size() && (codon_position_is_indeterminate_list[i] == "1"))
+          s+= "&ordm;";
+        } else {
+          // Noncoding
+          s+= nonbreaking(gene_position_list[i]);
+        }
       }
     }
   }
@@ -2092,7 +2109,7 @@ void add_html_fields_to_mutation(cDiffEntry& mut, MutationTableOptions& options)
   switch (mut._type)
   {
     case SNP:{
-      html_mutation = mut["_ref_seq"] + "&rarr;" + mut[NEW_SEQ];
+      html_mutation = mut[REF_SEQ] + "&rarr;" + mut[NEW_SEQ];
     } break;
       
     case INS:{

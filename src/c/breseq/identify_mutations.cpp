@@ -252,57 +252,112 @@ bool rejected_RA_indel_homopolymer(cDiffEntry& ra,
   //
   // First case,
   // 1) indel in what was originally a homopolymer adding a base that is the same
-  if (reject_indel_homopolymer_length && ((ra[MAJOR_BASE] == ".") || (ra[MINOR_BASE] == ".")))
+  cout << ra.as_string() << endl;
+  
+  if (reject_indel_homopolymer_length)
   {
-    // Code needs to be robust to the mutation being at the beginning
-    // OR end of the homopolymer tract
+    // Note: code must be robust to the mutation being at the beginning
+    // OR end of the homopolymer tract until we get uniform read alignments
     
-    string seq_id = ra["seq_id"];
-    int32_t mut_pos = from_string<uint32_t>(ra["position"]);
-    bool is_insertion = (from_string<int32_t>(ra[INSERT_POSITION]) > 0);
-    string mut_base = (ra[MAJOR_BASE] == ".") ? ra[MINOR_BASE] : ra[MAJOR_BASE];
-    int32_t homopolymer_length = 0;
-    
-    // If we are an insertion, we need to start on the base before or the base after,
-    // depending on which one we match (if we match neither than our length is zero
-    bool no_match = false;
-    if (is_insertion) {
+    // Mut base is the base we are looking for in homopolymers
+    bool do_test = false;
+    string mut_base;
+
+    if (ref_seq_info[ra[SEQ_ID]].get_ploidy() == 1) {
+      // Haploid case
+      if ( (ra[REF_BASE]==".") || (ra[NEW_BASE] == ".") ) {
+        do_test = true;
+        mut_base = (ra[REF_BASE]==".") ? ra[NEW_BASE] : ra[REF_BASE];
+      }
+    } else if ((ra[REF_BASE].find(".") != string::npos) || (ra[NEW_BASE].find(".") != string::npos)) {
+      // Multiploid case
+      // Require that the reference allele be all the same character
+      //   If ref is not a gap then test if there is at least one gap in new and all other bases are the ref
+      //   If ref is a gap then test if new contains only one type of non-gap base (possibly also including gaps)
       
-      // This is the base before
-      if (ref_seq_info.get_sequence_1(seq_id, mut_pos, mut_pos) != mut_base) {
+
+      vector<string> ref_bases = printable_genotype_to_list(ra[REF_BASE]);
+      vector<string> new_bases = printable_genotype_to_list(ra[NEW_BASE]);
+
+      bool ref_all_same = true;
+      for (vector<string>::iterator b=ref_bases.begin(); b!=ref_bases.end(); b++) {
+        ref_all_same = ref_all_same && (*b == ref_bases[0]);
+      }
+      
+      if (ref_all_same) {
+        string ref_base_all = ref_bases[0];
         
-        // No match? -- Now check the base after
-        mut_pos++;
-        if (mut_pos > static_cast<int32_t>(ref_seq_info.get_sequence_length(seq_id))) {
-          no_match = true;
-        } else if (ref_seq_info.get_sequence_1(seq_id, mut_pos, mut_pos) != mut_base) {
-          no_match = true;
+        bool new_all_same_non_gap_base = true;
+        string new_base_not_gap;
+        for (vector<string>::iterator b=new_bases.begin(); b!=new_bases.end(); b++) {
+          
+          // If nongap check that it is the same as previously encountered nongaps
+          if (*b != ".") {
+            if (new_base_not_gap.size() == 0) {
+              new_base_not_gap = *b;
+            } else {
+              new_all_same_non_gap_base = new_all_same_non_gap_base && (new_base_not_gap == *b);
+            }
+          }
+        }
+        
+        if (new_all_same_non_gap_base && ( (new_base_not_gap == ref_base_all) || (ref_base_all == ".") )) {
+          do_test = true;
+          mut_base = (ref_base_all==".") ? new_base_not_gap : ref_base_all;
+          
+          cout << "Doing test using base: " << mut_base << endl;
         }
       }
     }
-    
-    // extend match
-    if (!no_match) {
+
+  
+    if (do_test) {
+      string seq_id = ra["seq_id"];
+      int32_t mut_pos = from_string<uint32_t>(ra["position"]);
+      bool is_insertion = (from_string<int32_t>(ra[INSERT_POSITION]) > 0);
+      int32_t homopolymer_length = 0;
       
-      // check before
-      int32_t start_pos = mut_pos - 1;
-      while ( (ref_seq_info.get_sequence_1(seq_id, start_pos, start_pos) == mut_base) && (start_pos > 0) ) {
-        start_pos--;
+      // If we are an insertion, we need to start on the base before or the base after,
+      // depending on which one we match (if we match neither than our length is zero
+      bool no_match = false;
+      if (is_insertion) {
+        
+        // This is the base before
+        if (ref_seq_info.get_sequence_1(seq_id, mut_pos, mut_pos) != mut_base) {
+          
+          // No match? -- Now check the base after
+          mut_pos++;
+          if (mut_pos > static_cast<int32_t>(ref_seq_info.get_sequence_length(seq_id))) {
+            no_match = true;
+          } else if (ref_seq_info.get_sequence_1(seq_id, mut_pos, mut_pos) != mut_base) {
+            no_match = true;
+          }
+        }
       }
-      start_pos++;
       
-      int32_t end_pos = mut_pos + 1;
-      while ( (ref_seq_info.get_sequence_1(seq_id, end_pos, end_pos) == mut_base) && (end_pos <= static_cast<int32_t>(ref_seq_info.get_sequence_length(seq_id)) ) ) {
-        end_pos++;
+      // extend match
+      if (!no_match) {
+        
+        // check before
+        int32_t start_pos = mut_pos - 1;
+        while ( (ref_seq_info.get_sequence_1(seq_id, start_pos, start_pos) == mut_base) && (start_pos > 0) ) {
+          start_pos--;
+        }
+        start_pos++;
+        
+        int32_t end_pos = mut_pos + 1;
+        while ( (ref_seq_info.get_sequence_1(seq_id, end_pos, end_pos) == mut_base) && (end_pos <= static_cast<int32_t>(ref_seq_info.get_sequence_length(seq_id)) ) ) {
+          end_pos++;
+        }
+        end_pos--;
+        homopolymer_length = end_pos - start_pos + 1;
       }
-      end_pos--;
-      homopolymer_length = end_pos - start_pos + 1;
-    }
-    
-    if (homopolymer_length >= static_cast<int32_t>(reject_indel_homopolymer_length))
-    {
-      rejected = true;
-      ra.add_reject_reason("INDEL_HOMOPOLYMER");
+      
+      if (homopolymer_length >= static_cast<int32_t>(reject_indel_homopolymer_length))
+      {
+        rejected = true;
+        ra.add_reject_reason("INDEL_HOMOPOLYMER");
+      }
     }
   }
   
@@ -310,7 +365,7 @@ bool rejected_RA_indel_homopolymer(cDiffEntry& ra,
   // 2) A mutation in the middle of a stretch of one base to what is in the rest of that stretch
   //    TTTTTTATTTTTT
   //    TTTTTTTTTTTTT
-  if (reject_surrounding_homopolymer_length && (ra[MAJOR_BASE] != ".") && (ra[MINOR_BASE] != "."))    {
+  if (reject_surrounding_homopolymer_length && (ra[REF_BASE] != ".") && (ra[NEW_BASE] != "."))    {
     
     string seq_id = ra["seq_id"];
     int32_t mut_pos = from_string<int32_t>(ra["position"]);
@@ -589,6 +644,34 @@ bool test_RA_evidence_POLYMORPHISM_mode(
   return true;
 }
   
+// Returns whether it should be deleted
+bool test_RA_evidence_MULTIPLOID_mode(
+                                     cDiffEntry& ra,
+                                     cReferenceSequences& ref_seq_info,
+                                     const Settings& settings
+                                     )
+{
+  double consensus_score = double_from_string(ra[CONSENSUS_SCORE]);
+  
+  /////////////////////////////////
+  // Perform CONSENSUS checks
+  /////////////////////////////////
+  
+  if (consensus_score < settings.mutation_log10_e_value_cutoff) {
+    ra.add_reject_reason("SCORE_CUTOFF");
+  }
+  
+  // @JEB Added 2018-10-07
+  rejected_RA_indel_homopolymer(ra,
+                                ref_seq_info,
+                                settings.consensus_reject_indel_homopolymer_length,
+                                settings.consensus_reject_surrounding_homopolymer_length,
+                                false
+                                );
+  
+  return false;
+}
+  
 void test_RA_evidence(
                         cGenomeDiff& gd,
                         cReferenceSequences& ref_seq_info,
@@ -644,6 +727,10 @@ void test_RA_evidence(
         delete_entry = test_RA_evidence_CONSENSUS_mode(ra, ref_seq_info, settings);
       }
     } else {
+      
+      delete_entry = test_RA_evidence_MULTIPLOID_mode(ra, ref_seq_info, settings);
+
+      
       // Multiploid case!
       rejected_RA_indel_homopolymer(ra, ref_seq_info, settings.consensus_reject_indel_homopolymer_length, settings.consensus_reject_surrounding_homopolymer_length, false);
     }
@@ -1315,8 +1402,7 @@ void identify_mutations_pileup::pileup_callback(const pileup& p) {
 void identify_mutations_pileup::at_target_start(const uint32_t tid)
 {
   // Create the SNP Caller for this reference with proper ploidy
-  _snp_caller.initialize(_ref_seq_info[tid].get_ploidy());
-  
+  _snp_caller.initialize(_ref_seq_info[tid].get_ploidy(), _settings.genotype_caller_mutation_prior, _settings.genotype_caller_heterozygote_prior);
   
   // Open per-reference coverage file:
 	if(_print_coverage_data) {
@@ -1904,13 +1990,18 @@ double identify_mutations_pileup::calculate_two_base_model_log10_likelihood(
 }
   
   
-void cDiscreteSNPCaller::initialize(const uint32_t ploidy)
+void cDiscreteSNPCaller::initialize(
+                                    const uint32_t ploidy,
+                                    const double mutant_prior,
+                                    const double heterozygote_prior
+                                    )
 {
+  // Currently we fix this at 0.8 because reset doesn't properyly change things based on what is mutant/nonmutant
+  (void)mutant_prior;
+  
   this->clear_genotypes();
   _ploidy = ploidy;
-  
-  // Uniform priors across all bases.
-  
+
   vector<string> last_genotype_list = make_vector<string>("");
   vector<string> current_genotype_list;
   for(uint32_t p=0; p<ploidy; p++) {
@@ -1928,22 +2019,29 @@ void cDiscreteSNPCaller::initialize(const uint32_t ploidy)
     current_genotype_list.clear();
   }
   
+  double num_homozygote_states = 5;
+  double num_heterozygote_states = last_genotype_list.size() - num_homozygote_states;
+  
+  for(size_t i=0; i<last_genotype_list.size(); i++) {
+    
+    bool is_heterozygote = false;
+    for(std::string::iterator it = last_genotype_list[i].begin()++; it != last_genotype_list[i].end(); ++it) {
+      is_heterozygote = is_heterozygote || (last_genotype_list[i][0] != *it);
+    }
+    
+    double probability = is_heterozygote
+      ? heterozygote_prior/num_heterozygote_states
+      : 1/num_homozygote_states - heterozygote_prior;
+
+    add_genotype(last_genotype_list[i], probability);
+  }
+  
+  // Uniform priors across all bases.
+  // To get these use mutant_prior = 0.8 for haploid case
+  /*
   double uniform_probability = 1.0 / static_cast<double>(last_genotype_list.size());
   for(size_t i=0; i<last_genotype_list.size(); i++) {
     add_genotype(last_genotype_list[i], uniform_probability);
-  }
-  
-  /*
-  // Prior that we expect one change from reference
-  else if (_type == "haploid-change") {
-    
-    // recall that first one counts as reference
-    double uniform_probability = 1.0 / reference_length;    
-    add_genotype("A", 1.0 - 4.0 * uniform_probability);
-    add_genotype("C", uniform_probability);
-    add_genotype("G", uniform_probability);
-    add_genotype("T", uniform_probability);
-    add_genotype(".", uniform_probability);
   }
   */
   
@@ -2017,7 +2115,7 @@ void cDiscreteSNPCaller::update(const covariate_values_t& cv, bool obs_top_stran
       }
       this_pr += (correct_mapping_prob * et.get_prob(this_cv) + incorrect_mapping_prob * 1.0 / _genotype_vector.size()) * pow(10, this->_log10_genotype_probabilities[i]) / gv.size();
       
-      // Floating point error can make this a very  negative number
+      // Floating point error can make this a very negative number
       if (this_pr < 0.0) this_pr = 0.0;
     }
     
@@ -2040,7 +2138,7 @@ void cDiscreteSNPCaller::update(const covariate_values_t& cv, bool obs_top_stran
       this_pr += (correct_mapping_prob * et.get_prob(this_cv) + incorrect_mapping_prob * 1 / _genotype_vector.size()) / gv.size();
     }
     
-    this->_log10_genotype_probabilities[i] += log10(this_pr) - log10(total_prob);
+    this->_log10_genotype_probabilities[i] += log10( this_pr) - log10(total_prob);
     
     if (this->_log10_genotype_probabilities[i] > highest_pr) {
       this->_best_genotype_index = i;

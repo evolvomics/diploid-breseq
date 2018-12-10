@@ -332,7 +332,7 @@ namespace breseq {
   // takes a string that is supposed to be bases
   inline bool is_base_sequence(const string& base_string) {
     for(size_t i=0; i<base_string.size(); i++) {
-      if (!strchr( "ATCGN",  toupper(base_string[i])))
+      if (!strchr( "ATCGN/.",  toupper(base_string[i])))
         return false;
     }
     return true;

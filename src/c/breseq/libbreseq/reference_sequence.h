@@ -33,14 +33,15 @@ namespace breseq {
   // Pre-declaration
 	class Settings;
   
-  
+  extern const string genotype_separator;
+  extern const string html_genotype_separator;
   
   inline string internal_to_printable_genotype(const string& internal_genotype)
   {
     string s = internal_genotype;
     size_t num_genotypes = s.size();
     for (size_t i=1; i<num_genotypes; i++) {
-      s.insert(i*2-1,"/");
+      s.insert(i*2-1,genotype_separator);
     }
     return s;
   }
@@ -48,7 +49,7 @@ namespace breseq {
   inline bool printable_genotype_is_all_gaps(const string& internal_genotype)
   {
     bool allgaps = true;
-    vector<string> s = split(internal_genotype, "/");
+    vector<string> s = split(internal_genotype, genotype_separator);
     for (vector<string>::iterator it = s.begin(); it != s.end(); it++) {
       allgaps = allgaps && (*it == ".");
     }
@@ -60,9 +61,19 @@ namespace breseq {
     if (ploidy == 1) {
       return internal_genotype.length();
     } else {
-      vector<string> v = split(internal_genotype, ";");
-      return v.size();
+      vector<string> v = split(internal_genotype, "/");
+      return v.size() / ploidy;
     }
+  }
+  
+  inline vector<string> printable_genotype_to_list(const string& printable_genotype)
+  {
+    return split(printable_genotype, genotype_separator);
+  }
+  
+  inline string list_to_printable_genotype(vector<string> genotype_list)
+  {
+    return join(genotype_list, genotype_separator);
   }
   
   /* Position for dealing with things that are relative to reference genom
