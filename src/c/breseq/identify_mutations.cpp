@@ -252,7 +252,6 @@ bool rejected_RA_indel_homopolymer(cDiffEntry& ra,
   //
   // First case,
   // 1) indel in what was originally a homopolymer adding a base that is the same
-  cout << ra.as_string() << endl;
   
   if (reject_indel_homopolymer_length)
   {
@@ -289,10 +288,12 @@ bool rejected_RA_indel_homopolymer(cDiffEntry& ra,
         
         bool new_all_same_non_gap_base = true;
         string new_base_not_gap;
+        bool new_all_gaps = true;
         for (vector<string>::iterator b=new_bases.begin(); b!=new_bases.end(); b++) {
           
           // If nongap check that it is the same as previously encountered nongaps
           if (*b != ".") {
+            new_all_gaps = false;
             if (new_base_not_gap.size() == 0) {
               new_base_not_gap = *b;
             } else {
@@ -301,11 +302,9 @@ bool rejected_RA_indel_homopolymer(cDiffEntry& ra,
           }
         }
         
-        if (new_all_same_non_gap_base && ( (new_base_not_gap == ref_base_all) || (ref_base_all == ".") )) {
+        if (new_all_same_non_gap_base && ( (new_base_not_gap == ref_base_all) || (ref_base_all == ".") || new_all_gaps )) {
           do_test = true;
           mut_base = (ref_base_all==".") ? new_base_not_gap : ref_base_all;
-          
-          cout << "Doing test using base: " << mut_base << endl;
         }
       }
     }
@@ -806,12 +805,17 @@ identify_mutations_pileup::identify_mutations_pileup(
 	// reserve enough space for the sequence info:
 	_seq_info.resize(m_bam->header->n_targets);
 	
+  // ------> DIPLOID Remove Bonferroni correction!
+  /*
   // tally up the reference lengths from the bam file
 	for(int i=0; i<m_bam->header->n_targets; ++i) {
 		_log10_ref_length += static_cast<double>(m_bam->header->target_len[i]);
 	}
 	assert(_log10_ref_length != 0);
 	_log10_ref_length = log10(_log10_ref_length);
+  */
+  // <----------
+  _log10_ref_length = 0;
   
   // are we printing detailed coverage information?
   _print_coverage_data = true;
@@ -902,7 +906,7 @@ void identify_mutations_pileup::pileup_callback(const pileup& p) {
 		bool this_position_unique_only_coverage=true;
 		
     //## reset SNP caller
-    _snp_caller.reset(basechar2index(ref_base_char));
+    _snp_caller.reset(_ref_seq_info[p.target()].get_genotype_1(position, insert_count));
         
 		//## polymorphism prediction data
 		vector<polymorphism_data> pdata;
@@ -2022,6 +2026,12 @@ void cDiscreteSNPCaller::initialize(
   double num_homozygote_states = 5;
   double num_heterozygote_states = last_genotype_list.size() - num_homozygote_states;
   
+  double total_reference_is_N = num_homozygote_states * mutant_prior + num_heterozygote_states * mutant_prior * heterozygote_prior;
+  
+  double total_reference_is_homozygous = 1 + (num_homozygote_states-1) * mutant_prior + num_heterozygote_states * mutant_prior * heterozygote_prior;
+ 
+  double total_reference_is_heterozygous = 1 + num_homozygote_states * mutant_prior + (num_heterozygote_states-1) * mutant_prior * heterozygote_prior;
+  
   for(size_t i=0; i<last_genotype_list.size(); i++) {
     
     bool is_heterozygote = false;
@@ -2029,13 +2039,19 @@ void cDiscreteSNPCaller::initialize(
       is_heterozygote = is_heterozygote || (last_genotype_list[i][0] != *it);
     }
     
-    double probability = is_heterozygote
-      ? heterozygote_prior/num_heterozygote_states
-      : 1/num_homozygote_states - heterozygote_prior;
-
-    add_genotype(last_genotype_list[i], probability);
+    double basic_probability = is_heterozygote ? heterozygote_prior * mutant_prior : mutant_prior;
+    
+    double probability_reference_is_N = basic_probability / total_reference_is_N;
+    double probability_reference_is_homozygous = basic_probability / total_reference_is_homozygous;
+    double probability_reference_is_heterozygous = basic_probability / total_reference_is_heterozygous;
+    
+    add_genotype(last_genotype_list[i], probability_reference_is_N, probability_reference_is_homozygous, probability_reference_is_heterozygous);
   }
   
+  _log10_genotype_prior_probability_for_homozygous_reference = log10(1 / total_reference_is_heterozygous);
+  _log10_genotype_prior_probability_for_heterozygous_reference = log10(1 / total_reference_is_homozygous);
+  
+  // Very old
   // Uniform priors across all bases.
   // To get these use mutant_prior = 0.8 for haploid case
   /*
@@ -2045,46 +2061,76 @@ void cDiscreteSNPCaller::initialize(
   }
   */
   
-  // Check priors
-  double total_probability = 0;
-  for(size_t i=0; i<_log10_genotype_prior_probabilities.size(); i++) {
-    total_probability += pow(10, _log10_genotype_prior_probabilities[i]);
+  // Check priors - not trivial to do now
+  /*
+  {
+    double total_probability = 0;
+    for(size_t i=0; i<_log10_genotype_prior_probabilities.size(); i++) {
+      total_probability += pow(10, _log10_genotype_prior_probabilities[i]);
+    }
+    ostringstream ss;
+    ss << setprecision(5) << total_probability;
+    ASSERT( from_string<double>(ss.str()) == 1.0, "Prior probabilities do not sum to 1. (" + to_string(total_probability) + ").")
   }
-  ostringstream ss;
-  ss << setprecision(5) << total_probability;
-  ASSERT( from_string<double>(ss.str()) == 1.0, "Prior probabilities do not sum to 1. (" + to_string(total_probability) + ").")
-  
-  reset(0);
+  */
 }
   
 void cDiscreteSNPCaller::clear_genotypes() {
-  _log10_genotype_prior_probabilities.clear();
+  _log10_genotype_prior_probabilities_reference_is_homozygous.clear();
+  _log10_genotype_prior_probabilities_reference_is_heterozygous.clear();
+  _log10_genotype_prior_probability_for_homozygous_reference = 0;
+  _log10_genotype_prior_probability_for_heterozygous_reference = 0;
+
   _genotype_vector.clear();
+  _genotype_map.clear();
 }
   
-void cDiscreteSNPCaller::add_genotype(const string& genotype, double probability) {
+void cDiscreteSNPCaller::add_genotype(
+                                      const string& genotype,
+                                      double probability_reference_is_N,
+                                      double probability_reference_is_homozygous,
+                                      double probability_reference_is_heterozygous)
+{
   
-  _log10_genotype_prior_probabilities.push_back(log10(probability));
-  
+  _log10_genotype_prior_probabilities_reference_is_N.push_back(log10(probability_reference_is_N));
+  _log10_genotype_prior_probabilities_reference_is_homozygous.push_back(log10(probability_reference_is_homozygous));
+  _log10_genotype_prior_probabilities_reference_is_heterozygous.push_back(log10(probability_reference_is_heterozygous));
+
   vector<base_index> gv;
   for(size_t i=0; i<genotype.length(); i++) {
     gv.push_back(basechar2index(genotype[i]));
   }
-  _genotype_vector.push_back(gv);
   
+  _genotype_map[genotype] = _genotype_vector.size();
+  _genotype_vector.push_back(gv);
 }
   
   
-void cDiscreteSNPCaller::reset(uint8_t ref_base_index) {
+void cDiscreteSNPCaller::reset(const string& ref_genotype) {
   _best_genotype_index = 0;
   _observations = 0;
   _normalized_observations = 0;
-  _log10_genotype_probabilities = _log10_genotype_prior_probabilities;
   
-  (void) ref_base_index;
-  //this is for where there are unbalanced priors -- haploid-change
-  //they do not behave properly when the reference is 'N'
-  //swap(_genotype_probability[0], _genotype_probability[ref_base_index]);
+  // If we have an N in the genotype, use uniform priors (no mutant prior)
+  if (ref_genotype.find('N') != string::npos) {
+    _log10_genotype_probabilities = _log10_genotype_prior_probabilities_reference_is_N;
+    return;
+  }
+  
+  // Is the reference genotype homozygous?
+  bool ref_is_homozygous = true;
+  for (string::const_iterator b = ref_genotype.begin()++; b != ref_genotype.end(); b++) {
+    ref_is_homozygous = ref_is_homozygous && (*b == ref_genotype[0]);
+  }
+  
+  if (ref_is_homozygous) {
+    _log10_genotype_probabilities = _log10_genotype_prior_probabilities_reference_is_homozygous;
+    _log10_genotype_probabilities[_genotype_map[ref_genotype]] = _log10_genotype_prior_probability_for_homozygous_reference;
+  } else {
+    _log10_genotype_probabilities = _log10_genotype_prior_probabilities_reference_is_heterozygous;
+    _log10_genotype_probabilities[_genotype_map[ref_genotype]] = _log10_genotype_prior_probability_for_heterozygous_reference;
+  }
+  
 }
   
 void cDiscreteSNPCaller::update(const covariate_values_t& cv, bool obs_top_strand, int32_t mapping_quality, cErrorTable& et) {

@@ -68,9 +68,9 @@ For further information, see the `VCF format (version 4.0) definition <http://ww
 Multiploid Methods
 ------------------
 
-As in normal (haploid) |breseq|, variant calling by |diploid-breseq| uses Bayesian methods. An empirical error model is fit from read alignments. Then a genotype score is calculated for each column in the resulting alignment to the reference genome. The genotype caller includes five  states in the model: the four bases 'A', 'T', 'C', 'G', plus a gap '.'. The genotype caller uses a prior probability for all mixed (heterozygous) states (e.g., A/T). The sum across all of these values can be set via the command line option ``--heterozygote-prior``. The default is 1E-6. Set this to be lower if you expect heterozygosity to be rare in a sample.
+As in normal (haploid) |breseq|, variant calling by |diploid-breseq| uses Bayesian methods. An empirical error model is fit from read alignments. Then a genotype score is calculated for each column in the resulting alignment to the reference genome. The genotype caller includes five  states in the model: the four bases 'A', 'T', 'C', 'G', plus a gap '.'. The genotype caller uses prior probabilities that combine two input options. First, there is a ``--mutation-prior`` that is applied to all of the non-reference states. Second, the prior probabilities for all mixed (heterozygous) states (e.g., A/T) are further multiplied by ``--heterozygote-prior`` to avoid overcalling of heterozygous mutations. If you set these values to lower probabilities than the default, it will make mutation calling more stringent.
 
-For RA entries the genotype score is -log:sub:`10`(P) - log:sub:`10`(L), where `P` is the probability that the genotype is **not** the one that is called and `L` is the length of the genome. (The latter term, involving `L`, is a crude correction for multiple testing.) Thus, a score of –5 theoretically means that there is only a 10:sup:`-5` chance of an incorrect genotype call. In reality, the error model does not capture all kinds of biases and this should be used as a relative indicator of confidence in a call rather than an absolute one. You can adjust the ``--base-quality-cutoff`` option to control this stringency.
+For RA entries the final genotype score is -log:sub:`10`(P), where `P` is the probability that the genotype is **not** the one that is called. Thus, a score of 5 theoretically means that there is  a 10:sup:`-5` chance of an incorrect genotype call. In reality, the error model does not capture all kinds of biases and this should be used as a relative indicator of confidence in a call rather than an absolute one. You can adjust the ``--consensus-score-cutoff`` option to control this stringency. If no genotype (even the reference) is predicted with a score above this threshold, then an ``UN`` evidence item is added for that position indicating that no call could confidently be made for that sample. The ``UN`` entries give ``?`` values in the ``gdtools COMPARE`` output tables.
 
 **Limitation 1:** The current version of |diploid-breseq| does *not* attempt to call larger heterozygous mutations, such as deletions greater than a few bases in one copy of a chromosome or whole-chromosome aneuploidies. It only uses RA evidence (not JC or MC evidence) for calling heterozygous mutations.
 
@@ -97,8 +97,8 @@ An annotated version of these lines contains additional information::
 
 **Note:** The ``new_cov`` and ``ref_cov`` entries vary from the standard use of the ``/`` divider per allele. Because in normal |breseq| the ``/`` is used to separate the top versus bottom strand of read coverage, a semicolon ``;`` is used to separate genotypes for these entries.
 
-Multiploid Tutorial
--------------------
+Multiploid Mode Test Data
+---------------------------
 
 For testing |diploid-breseq|, we used data from a yeast evolution experiment that began with haploid, diploid, and tetraploid ancestors:
 

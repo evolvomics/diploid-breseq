@@ -193,8 +193,13 @@ namespace breseq {
                     const double heterozygote_prior
                     );
     void clear_genotypes();
-    void add_genotype(const string& genotype, double probability);
-    void reset(uint8_t ref_base_index);
+    void add_genotype(
+                      const string& genotype,
+                      double probability_reference_is_N,
+                      double probability_reference_is_homozygous,
+                      double probability_reference_is_heterozygous
+                      );
+    void reset(const string& ref_genotype);
     void update(
                 const covariate_values_t& cv, 
                 bool obs_top_strand, 
@@ -211,9 +216,15 @@ namespace breseq {
     
     uint32_t _observations;                        // number of read bases recorded
     double _normalized_observations;               // observations, taking into account mapping quality probability
-    vector<double> _log10_genotype_prior_probabilities;
+    vector<double> _log10_genotype_prior_probabilities_reference_is_N;
+    vector<double> _log10_genotype_prior_probabilities_reference_is_homozygous;
+    vector<double> _log10_genotype_prior_probabilities_reference_is_heterozygous;
+    double _log10_genotype_prior_probability_for_homozygous_reference;
+    double _log10_genotype_prior_probability_for_heterozygous_reference;
+    
     vector<double> _log10_genotype_probabilities;
     vector<vector<base_index> > _genotype_vector;  // holds all possible genotypes as lists of bases
+    map<string,size_t> _genotype_map; // maps gentypes as string to their indices
     uint32_t _best_genotype_index;
   };
   

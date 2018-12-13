@@ -247,18 +247,14 @@ namespace breseq
     options.addUsage("", ADVANCED_OPTION);
     options.addUsage("Read Alignment (RA) Evidence Options", ADVANCED_OPTION);
     options
-    ("heterozygote-prior", "The prior probability that a site is heterozygous for the Bayesian genotype caller", "1E-6", ADVANCED_OPTION)
-    ("mutation-prior", "The prior probability that a homozygous site is not the reference allele for the Bayesian genotype caller", "0.8", ADVANCED_OPTION)
+      ("mutation-prior", "The relative prior probability assigned to genotype states that are not the reference state in the Bayesian genotype caller. Lower values result more stringent predictions.", "1E-3", ADVANCED_OPTION)
+      ("heterozygote-prior", "The relative prior probability that a site is heterozygous for the Bayesian genotype caller. For heterozygous non-reference sites the relative prior probability is heterozygote-primer * mutation-prior. Lower values result more stringent predictions.", "1E-3", ADVANCED_OPTION)
     ;
-    options.addUsage("For the haploid genome case, the priors are set to 1-(mutation-prior) for the reference base and (mutation-prior)/4 to each of the four other states (gaps are included as a base state). For the diploid or multiploid genome case, the priors are set to 1-(mutation-prior)-(heterozygote-prior) for the reference base and (mutation-prior)/4 to each of the four other states (gaps are included as a base state) and to heterozygote-prior/n for the n heterozygous states", ADVANCED_OPTION);
-
-    double genotype_caller_heterozygote_prior;
-    double genotype_caller_non_reference_prior;
     
     options.addUsage("", ADVANCED_OPTION);
     options.addUsage("Consensus Read Alignment (RA) Evidence Options", ADVANCED_OPTION);
     options
-    ("consensus-score-cutoff", "Log10 E-value cutoff for consensus base substitutions and small indels (DEFAULT = 10)", "", ADVANCED_OPTION)
+    ("consensus-score-cutoff", "Log10 E-value cutoff for consensus base substitutions and small indels (DEFAULT = 2)", "", ADVANCED_OPTION)
     ("consensus-frequency-cutoff", "Only predict consensus mutations when the variant allele frequency is above this value. (DEFAULT = consensus mode, 0.8; polymorphism mode, 0.0)", "", ADVANCED_OPTION)
     ("consensus-minimum-variant-coverage", "Only predict consensus mutations when at least this many reads support the mutation. (DEFAULT = consensus mode, 0; polymorphism mode, 0)", "", ADVANCED_OPTION)
     ("consensus-minimum-total-coverage", "Only predict consensus mutations when at least this many reads total are aligned to a genome position. (DEFAULT = consensus mode, 0; polymorphism mode, 0)", "", ADVANCED_OPTION)
@@ -486,7 +482,7 @@ namespace breseq
       
       this->minimum_mapping_quality = 0;
       
-      this->mutation_log10_e_value_cutoff = 10;
+      this->mutation_log10_e_value_cutoff = 2;
       this->consensus_frequency_cutoff = 0; // zero is OFF - ensures any rejected poly with high freq move to consensus!
       this->consensus_minimum_variant_coverage = 0;
       this->consensus_minimum_total_coverage = 0;
@@ -520,7 +516,7 @@ namespace breseq
 
       this->minimum_mapping_quality = 0;
       
-      this->mutation_log10_e_value_cutoff = 10;
+      this->mutation_log10_e_value_cutoff = 2;
       this->consensus_frequency_cutoff = 0.8;
       this->consensus_minimum_variant_coverage = 0;
       this->consensus_minimum_total_coverage = 0;
@@ -558,7 +554,6 @@ namespace breseq
     
     this->genotype_caller_heterozygote_prior = from_string<double>(options["heterozygote-prior"]);
     this->genotype_caller_mutation_prior = from_string<double>(options["mutation-prior"]);
-    ASSERT(genotype_caller_mutation_prior == 0.8, "Currently you cannot change the mutation prior. Use a different score-cutoff to achieve the same effect.");
     
     if (options.count("consensus-score-cutoff"))
       this->mutation_log10_e_value_cutoff = from_string<double>(options["consensus-score-cutoff"]);
